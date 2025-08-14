@@ -1,70 +1,115 @@
-# Getting Started with Create React App
+# NBA Analytics App
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A full-stack application for generating custom NBA reports with real-time data analysis.
 
-## Available Scripts
+## 🏗️ Project Structure
 
-In the project directory, you can run:
+```
+nba-analytics-app/
+├── frontend/          # React application
+│   ├── src/
+│   │   ├── components/
+│   │   ├── services/
+│   │   └── utils/
+│   └── package.json
+├── backend/           # Express API server
+│   ├── src/
+│   │   ├── routes/
+│   │   ├── config/
+│   │   └── utils/
+│   ├── migrations/
+│   └── package.json
+└── package.json       # Root package.json
+```
 
-### `npm start`
+## 🚀 Quick Start
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+1. **Install all dependencies:**
+   ```bash
+   npm run install:all
+   ```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+2. **Set up environment variables:**
+   ```bash
+   cp backend/.env.example backend/.env
+   cp frontend/.env.example frontend/.env
+   ```
 
-### `npm test`
+3. **Start development servers:**
+   ```bash
+   npm run dev
+   ```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+4. **Access the application:**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:3001
 
-### `npm run build`
+## 📋 Available Scripts
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- `npm run dev` - Start both frontend and backend
+- `npm run dev:frontend` - Start only React app
+- `npm run dev:backend` - Start only Express server
+- `npm run build` - Build frontend for production
+- `npm run install:all` - Install dependencies for all packages
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 🗄️ Database Setup
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+1. Create PostgreSQL database
+2. Run migrations: `cd backend && npm run migrate`
+3. Seed data: `cd backend && npm run seed`
 
-### `npm run eject`
+## 🔧 Environment Variables
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Backend (.env)
+```
+DATABASE_URL=postgresql://username:password@localhost:5432/nba_analytics
+PORT=3001
+NODE_ENV=development
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### Frontend (.env)
+```
+REACT_APP_API_URL=http://localhost:3001
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## 🏀 Features
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+- Custom NBA report generation
+- Real-time player and team statistics
+- Advanced filtering and sorting
+- Interactive data visualization
+- Responsive design
 
-## Learn More
+## 🛠️ Tech Stack
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+**Frontend:**
+- React 19
+- Tailwind CSS
+- Lucide React Icons
+- Recharts
+- Axios
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+**Backend:**
+- Node.js
+- Express
+- PostgreSQL
+- CORS
 
-### Code Splitting
+## 📝 API Endpoints
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+- `GET /health` - Health check
+- `GET /api/reports/test` - Database connection test
+- `GET /api/reports/teams` - Get all teams
+- `POST /api/reports/generate` - Generate custom report
 
-### Analyzing the Bundle Size
+## 🤝 Contributing
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### Making a Progressive Web App
+## 📄 License
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+This project is licensed under the MIT License.
