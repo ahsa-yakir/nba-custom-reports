@@ -68,7 +68,7 @@ nba-analytics-app/
 2. Activate virtual environment: 'source venv/bin/activate'
 3. Install dependencies: 'pip install nba_api psycopg2-binary'
 4. Load up inital team data to be able to load future dates: 'python nba_pipeline.py setup'
-5. Load dates as you would like, example: 'python nba_pipeline 2025-01-07'
+5. Load dates as you would like, example: 'python nba_pipeline load 2025-01-07' or 'python nba_pipeline load date to date'
 
 ## ⚙️ Environment Variables
 
