@@ -143,9 +143,74 @@ class NBADataPipeline:
         except Exception as e:
             logger.error(f"Error fetching teams: {e}")
             raise
+        
+    def get_team_conference_division(self, team_id: str, team_name: str) -> tuple:
+        """
+        Determine conference and division for NBA teams
+        Returns (conference, division)
+        """
+        
+        # Eastern Conference teams
+        eastern_teams = {
+            # Atlantic Division
+            '1610612738': ('Eastern', 'Atlantic'),  # Boston Celtics
+            '1610612751': ('Eastern', 'Atlantic'),  # Brooklyn Nets
+            '1610612752': ('Eastern', 'Atlantic'),  # New York Knicks
+            '1610612755': ('Eastern', 'Atlantic'),  # Philadelphia 76ers
+            '1610612761': ('Eastern', 'Atlantic'),  # Toronto Raptors
+            
+            # Central Division
+            '1610612741': ('Eastern', 'Central'),   # Chicago Bulls
+            '1610612739': ('Eastern', 'Central'),   # Cleveland Cavaliers
+            '1610612765': ('Eastern', 'Central'),   # Detroit Pistons
+            '1610612754': ('Eastern', 'Central'),   # Indiana Pacers
+            '1610612749': ('Eastern', 'Central'),   # Milwaukee Bucks
+            
+            # Southeast Division
+            '1610612737': ('Eastern', 'Southeast'), # Atlanta Hawks
+            '1610612766': ('Eastern', 'Southeast'), # Charlotte Hornets
+            '1610612748': ('Eastern', 'Southeast'), # Miami Heat
+            '1610612753': ('Eastern', 'Southeast'), # Orlando Magic
+            '1610612764': ('Eastern', 'Southeast'), # Washington Wizards
+        }
+        
+        # Western Conference teams
+        western_teams = {
+            # Northwest Division
+            '1610612743': ('Western', 'Northwest'),  # Denver Nuggets
+            '1610612750': ('Western', 'Northwest'),  # Minnesota Timberwolves
+            '1610612760': ('Western', 'Northwest'),  # Oklahoma City Thunder
+            '1610612757': ('Western', 'Northwest'),  # Portland Trail Blazers
+            '1610612762': ('Western', 'Northwest'),  # Utah Jazz
+            
+            # Pacific Division
+            '1610612744': ('Western', 'Pacific'),    # Golden State Warriors
+            '1610612746': ('Western', 'Pacific'),    # LA Clippers
+            '1610612747': ('Western', 'Pacific'),    # Los Angeles Lakers
+            '1610612756': ('Western', 'Pacific'),    # Phoenix Suns
+            '1610612758': ('Western', 'Pacific'),    # Sacramento Kings
+            
+            # Southwest Division
+            '1610612742': ('Western', 'Southwest'),  # Dallas Mavericks
+            '1610612745': ('Western', 'Southwest'),  # Houston Rockets
+            '1610612763': ('Western', 'Southwest'),  # Memphis Grizzlies
+            '1610612740': ('Western', 'Southwest'),  # New Orleans Pelicans
+            '1610612759': ('Western', 'Southwest'),  # San Antonio Spurs
+        }
+        
+        # Check both dictionaries
+        if team_id in eastern_teams:
+            return eastern_teams[team_id]
+        elif team_id in western_teams:
+            return western_teams[team_id]
+        else:
+            # Fallback for unknown teams
+            logger.warning(f"Unknown team ID {team_id} ({team_name}), defaulting to Western/Pacific")
+            return ('Western', 'Pacific')
+
     
     def insert_teams(self, teams_data: List[Dict]):
-        """Insert NBA teams into database"""
+        """Insert NBA teams into database with correct conference/division"""
         logger.info("🏀 Inserting NBA teams...")
         
         with self.get_connection() as conn:
@@ -157,10 +222,8 @@ class NBADataPipeline:
                 full_name = team['full_name'] 
                 city = team['city']
                 
-                # Extract conference and division (not provided by static data)
-                # We'll set these to default values for now
-                conference = 'Eastern' if team_id in ['1610612738', '1610612751', '1610612766', '1610612761', '1610612748', '1610612753', '1610612755', '1610612749', '1610612765', '1610612754', '1610612752', '1610612759', '1610612764', '1610612739', '1610612737'] else 'Western'
-                division = 'Atlantic'  # Default division - could be enhanced later
+                # Get correct conference and division
+                conference, division = self.get_team_conference_division(team_id, full_name)
                 
                 cursor.execute("""
                     INSERT INTO teams (id, team_code, team_name, city, conference, division)
@@ -358,7 +421,7 @@ class NBADataPipeline:
                 assists=stats_dict.get('AST', 0),
                 steals=stats_dict.get('STL', 0),
                 blocks=stats_dict.get('BLK', 0),
-                turnovers=stats_dict.get('TOV', 0),
+                turnovers=stats_dict.get('TO', 0),
                 personal_fouls=stats_dict.get('PF', 0),
                 plus_minus=stats_dict.get('PLUS_MINUS', 0.0),
                 game_type=game_type
@@ -440,7 +503,7 @@ class NBADataPipeline:
                 assists=stats_dict.get('AST', 0),
                 steals=stats_dict.get('STL', 0),
                 blocks=stats_dict.get('BLK', 0),
-                turnovers=stats_dict.get('TOV', 0),
+                turnovers=stats_dict.get('TO', 0),
                 personal_fouls=stats_dict.get('PF', 0),
                 plus_minus=stats_dict.get('PLUS_MINUS', 0.0),
                 started=started,
