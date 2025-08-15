@@ -168,6 +168,7 @@ const buildOrderByClause = (sortConfig, measure) => {
   // Map display column names to SQL column names
   const getSortColumn = (column, measure) => {
     const commonColumns = {
+      'MINS': 'mins',
       'PTS': 'pts',
       'FGM': 'fgm',
       'FGA': 'fga',
@@ -254,6 +255,7 @@ const getBaseQuery = (measure) => {
         t.team_code as team,
         p.age,
         COUNT(*) as games_played,
+        ROUND(AVG(pgs.minutes_played), 1) as mins,
         ROUND(AVG(pgs.points), 1) as pts,
         ROUND(AVG(pgs.field_goals_made), 1) as fgm,
         ROUND(AVG(pgs.field_goals_attempted), 1) as fga,

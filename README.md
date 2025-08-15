@@ -19,6 +19,10 @@ nba-analytics-app/
 │   │   └── utils/
 │   ├── migrations/
 │   └── package.json
+├── data-pipeline/     # Python NBA data pipeline
+│   ├── nba_pipeline.py
+│   ├── venv/
+└── README.md   
 └── package.json       # Root package.json
 ```
 
@@ -55,10 +59,18 @@ nba-analytics-app/
 ## 🗄️ Database Setup
 
 1. Create PostgreSQL database
-2. Run migrations: `cd backend && npm run migrate`
+2. Run setup: `cd backend && npm run setup-db`
 3. Seed data: `cd backend && npm run seed`
 
-## 🔧 Environment Variables
+## 🔧 Pipeline Setup
+
+1. Create virtual environment: 'python3 -m venv venv'
+2. Activate virtual environment: 'source venv/bin/activate'
+3. Install dependencies: 'pip install nba_api psycopg2-binary'
+4. Load up inital team data to be able to load future dates: 'python nba_pipeline.py setup'
+5. Load dates as you would like, example: 'python nba_pipeline 2025-01-07'
+
+## ⚙️ Environment Variables
 
 ### Backend (.env)
 ```
@@ -94,6 +106,10 @@ REACT_APP_API_URL=http://localhost:3001
 - Express
 - PostgreSQL
 - CORS
+
+**Pipeline:**
+- Python
+- NBA_API
 
 ## 📝 API Endpoints
 
