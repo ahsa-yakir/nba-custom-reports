@@ -1,15 +1,19 @@
--- NBA Analytics Database Schema
--- This file creates all the necessary tables for NBA statistics
+-- 001_create_tables.sql
+-- NBA Database - Core Tables Creation
+-- Run this first to create all tables with foreign key constraints
 
--- Enable UUID extension for unique IDs
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+BEGIN;
+
+-- =====================================================
+-- CORE TABLES
+-- =====================================================
 
 -- Teams table
 CREATE TABLE teams (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    team_code VARCHAR(3) UNIQUE NOT NULL,  -- 'LAL', 'BOS', etc.
-    team_name VARCHAR(100) NOT NULL,       -- 'Los Angeles Lakers'
-    city VARCHAR(50) NOT NULL,             -- 'Los Angeles'
+    id VARCHAR(20) PRIMARY KEY,
+    team_code VARCHAR(3) UNIQUE NOT NULL,
+    team_name VARCHAR(100) NOT NULL,
+    city VARCHAR(50) NOT NULL,
     conference VARCHAR(10) CHECK (conference IN ('Eastern', 'Western')),
     division VARCHAR(20),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -18,39 +22,49 @@ CREATE TABLE teams (
 
 -- Players table
 CREATE TABLE players (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(20) PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    team_id UUID REFERENCES teams(id),
+    team_id VARCHAR(20),
     age INTEGER CHECK (age > 0 AND age < 50),
-    position VARCHAR(10),           -- 'PG', 'SG', 'SF', 'PF', 'C'
-    height_inches INTEGER,          -- Player height in inches
-    weight_pounds INTEGER,          -- Player weight in pounds
+    position VARCHAR(10),
+    height_inches INTEGER,
+    weight_pounds INTEGER,
     years_experience INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Foreign key constraint
+    CONSTRAINT players_team_id_fkey 
+        FOREIGN KEY (team_id) REFERENCES teams(id)
 );
 
--- Games table (stores game metadata)
+-- Games table
 CREATE TABLE games (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(20) PRIMARY KEY,
     game_date DATE NOT NULL,
-    season VARCHAR(10) NOT NULL,    -- '2023-24'
+    season VARCHAR(10) NOT NULL,
     game_type VARCHAR(20) DEFAULT 'regular' CHECK (game_type IN ('regular', 'playoff', 'preseason')),
-    home_team_id UUID REFERENCES teams(id),
-    away_team_id UUID REFERENCES teams(id),
+    home_team_id VARCHAR(20),
+    away_team_id VARCHAR(20),
     home_score INTEGER,
     away_score INTEGER,
     status VARCHAR(20) DEFAULT 'completed',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Foreign key constraints
+    CONSTRAINT games_home_team_id_fkey 
+        FOREIGN KEY (home_team_id) REFERENCES teams(id),
+    CONSTRAINT games_away_team_id_fkey 
+        FOREIGN KEY (away_team_id) REFERENCES teams(id)
 );
 
--- Player statistics per game
+-- Player game stats table
 CREATE TABLE player_game_stats (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    player_id UUID REFERENCES players(id) NOT NULL,
-    game_id UUID REFERENCES games(id) NOT NULL,
-    team_id UUID REFERENCES teams(id) NOT NULL,
+    id SERIAL PRIMARY KEY,
+    player_id VARCHAR(20) NOT NULL,
+    game_id VARCHAR(20) NOT NULL,
+    team_id VARCHAR(20) NOT NULL,
     
     -- Basic stats
     minutes_played DECIMAL(4,1) DEFAULT 0,
@@ -92,15 +106,23 @@ CREATE TABLE player_game_stats (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- Ensure one record per player per game
-    UNIQUE(player_id, game_id)
+    -- Constraints
+    UNIQUE(player_id, game_id),
+    
+    -- Foreign key constraints
+    CONSTRAINT player_game_stats_player_id_fkey 
+        FOREIGN KEY (player_id) REFERENCES players(id),
+    CONSTRAINT player_game_stats_team_id_fkey 
+        FOREIGN KEY (team_id) REFERENCES teams(id),
+    CONSTRAINT player_game_stats_game_id_fkey 
+        FOREIGN KEY (game_id) REFERENCES games(id)
 );
 
--- Team statistics per game
+-- Team game stats table
 CREATE TABLE team_game_stats (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    team_id UUID REFERENCES teams(id) NOT NULL,
-    game_id UUID REFERENCES games(id) NOT NULL,
+    id SERIAL PRIMARY KEY,
+    team_id VARCHAR(20) NOT NULL,
+    game_id VARCHAR(20) NOT NULL,
     
     -- Game result
     points INTEGER DEFAULT 0,
@@ -142,11 +164,21 @@ CREATE TABLE team_game_stats (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- Ensure one record per team per game
-    UNIQUE(team_id, game_id)
+    -- Constraints
+    UNIQUE(team_id, game_id),
+    
+    -- Foreign key constraints
+    CONSTRAINT team_game_stats_team_id_fkey 
+        FOREIGN KEY (team_id) REFERENCES teams(id),
+    CONSTRAINT team_game_stats_game_id_fkey 
+        FOREIGN KEY (game_id) REFERENCES games(id)
 );
 
--- Create a view for easy player season averages
+-- =====================================================
+-- VIEWS FOR EASY QUERYING
+-- =====================================================
+
+-- Player season averages view
 CREATE VIEW player_season_averages AS
 SELECT 
     p.id as player_id,
@@ -182,7 +214,7 @@ JOIN player_game_stats pgs ON p.id = pgs.player_id
 JOIN games g ON pgs.game_id = g.id
 GROUP BY p.id, p.name, t.team_code, t.team_name, p.age, g.season;
 
--- Create a view for team season totals
+-- Team season totals view
 CREATE VIEW team_season_totals AS
 SELECT 
     t.id as team_id,
@@ -216,3 +248,28 @@ FROM teams t
 JOIN team_game_stats tgs ON t.id = tgs.team_id
 JOIN games g ON tgs.game_id = g.id
 GROUP BY t.id, t.team_code, t.team_name, g.season;
+
+-- =====================================================
+-- COMMENTS FOR DOCUMENTATION
+-- =====================================================
+
+COMMENT ON TABLE teams IS 'NBA teams with their basic information';
+COMMENT ON TABLE players IS 'NBA players with their basic information';
+COMMENT ON TABLE games IS 'NBA games with date, teams, and scores';
+COMMENT ON TABLE player_game_stats IS 'Individual player statistics for each game';
+COMMENT ON TABLE team_game_stats IS 'Team statistics for each game';
+
+COMMENT ON COLUMN teams.id IS 'NBA API Team ID (e.g., 1610612737 for Atlanta Hawks)';
+COMMENT ON COLUMN players.id IS 'NBA API Player ID (e.g., 2544 for LeBron James)';
+COMMENT ON COLUMN games.id IS 'NBA API Game ID (e.g., 0022300001)';
+
+COMMIT;
+
+-- Verification
+SELECT 'Tables and views created successfully!' as status;
+SELECT 'Tables created: ' || COUNT(*) as table_count 
+FROM information_schema.tables 
+WHERE table_schema = 'public' AND table_type = 'BASE TABLE';
+SELECT 'Views created: ' || COUNT(*) as view_count 
+FROM information_schema.views 
+WHERE table_schema = 'public';

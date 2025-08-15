@@ -195,6 +195,7 @@ const buildReportQuery = (measure, filters, sortConfig) => {
         t.team_code as team,
         p.age,
         COUNT(*) as games_played,
+        ROUND(AVG(pgs.minutes_played), 1) as mins,
         ROUND(AVG(pgs.points), 1) as pts,
         ROUND(AVG(pgs.field_goals_made), 1) as fgm,
         ROUND(AVG(pgs.field_goals_attempted), 1) as fga,
@@ -285,6 +286,7 @@ const buildReportQuery = (measure, filters, sortConfig) => {
       case 'TEAM': case 'Team': sortColumn = 't.team_code'; break;
       case 'AGE': sortColumn = 'p.age'; break;
       case 'Games Played': sortColumn = 'games_played'; break;
+      case 'Minutes Played': sortColumn = 'minutes_played'; break;
       case 'Wins': sortColumn = 'wins'; break;
       case 'Losses': sortColumn = 'losses'; break;
       case 'Win %': sortColumn = 'win_pct'; break;
