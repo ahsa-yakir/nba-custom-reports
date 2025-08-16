@@ -144,7 +144,7 @@ class TraditionalStatsParser:
             
             # Check if player exists in database
             if player_id not in existing_players:
-                logger.info(f"Unknown player found: {player_name} ({player_id})")
+                logger.info(f"🔍 Unknown player found: {player_name} ({player_id})")
                 
                 # Try to add the unknown player
                 if add_unknown_player(
@@ -158,7 +158,7 @@ class TraditionalStatsParser:
                     added_players.append(f"{player_name} ({player_id})")
                 else:
                     # If we couldn't add them, skip this player
-                    logger.warning(f"Skipping player {player_name} ({player_id}) - could not add to database")
+                    logger.warning(f"⚠️ Skipping player {player_name} ({player_id}) - could not add to database")
                     continue
             
             # Convert minutes from "MM:SS" format to decimal
@@ -205,7 +205,7 @@ class TraditionalStatsParser:
         
         # Log added players
         if added_players:
-            logger.info(f"Added {len(added_players)} new players in game {game_id}: {', '.join(added_players[:3])}{'...' if len(added_players) > 3 else ''}")
+            logger.info(f"➕ Added {len(added_players)} new players in game {game_id}: {', '.join(added_players[:3])}{'...' if len(added_players) > 3 else ''}")
         
         return player_stats
 
@@ -295,7 +295,7 @@ class AdvancedStatsParser:
             
             # Check if player exists in database
             if player_id not in existing_players:
-                logger.info(f"Unknown player found: {player_name} ({player_id})")
+                logger.info(f"🔍 Unknown player found: {player_name} ({player_id})")
                 
                 # Try to add the unknown player using same logic as traditional extractor
                 if add_unknown_player(
@@ -309,7 +309,7 @@ class AdvancedStatsParser:
                     added_players.append(f"{player_name} ({player_id})")
                 else:
                     # If we couldn't add them, skip this player
-                    logger.warning(f"Skipping player {player_name} ({player_id}) - could not add to database")
+                    logger.warning(f"⚠️ Skipping player {player_name} ({player_id}) - could not add to database")
                     continue
             
             # Determine home/away
@@ -341,6 +341,6 @@ class AdvancedStatsParser:
         
         # Log added players
         if added_players:
-            logger.info(f"Added {len(added_players)} new players in game {game_id}: {', '.join(added_players[:3])}{'...' if len(added_players) > 3 else ''}")
+            logger.info(f"➕ Added {len(added_players)} new players in game {game_id}: {', '.join(added_players[:3])}{'...' if len(added_players) > 3 else ''}")
         
         return player_stats

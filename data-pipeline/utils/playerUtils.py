@@ -99,7 +99,7 @@ def fetch_player_details(player_id: str) -> Dict:
     Returns player details including height, weight, age, position, experience
     """
     try:
-        logger.info(f"  Fetching detailed info for player {player_id}")
+        logger.info(f"  🔍 Fetching detailed info for player {player_id}")
         
         # Add delay to avoid rate limiting
         time.sleep(0.5)
@@ -169,7 +169,7 @@ def add_unknown_player(db_connection, player_stats_dict: Dict, game_id: str,
         player_name = player_stats_dict.get('PLAYER_NAME', f'Player {player_id}')
         game_team_id = str(player_stats_dict['TEAM_ID'])
         
-        logger.info(f"Adding unknown player: {player_name} ({player_id})")
+        logger.info(f"➕ Adding unknown player: {player_name} ({player_id})")
         
         # Fetch detailed player information from NBA API
         player_details = fetch_player_details(player_id)
@@ -182,7 +182,7 @@ def add_unknown_player(db_connection, player_stats_dict: Dict, game_id: str,
             if not api_team_id or api_team_id == '0' or api_team_id == '' or api_team_id == 'None':
                 # Use the team they're playing for in this game
                 team_id = game_team_id
-                logger.info(f"  Player has no current team (API returned '{api_team_id}'), using game team: {game_team_id}")
+                logger.info(f"  🔄 Player has no current team (API returned '{api_team_id}'), using game team: {game_team_id}")
             else:
                 # Verify the API team exists in our database
                 if team_exists_func(api_team_id):
@@ -190,7 +190,7 @@ def add_unknown_player(db_connection, player_stats_dict: Dict, game_id: str,
                 else:
                     # API team doesn't exist in our DB, use game team
                     team_id = game_team_id
-                    logger.info(f"  API team {api_team_id} not in database, using game team: {game_team_id}")
+                    logger.info(f"  🔄 API team {api_team_id} not in database, using game team: {game_team_id}")
             
             age = player_details['age']
             position = normalize_position(player_details['position'])
@@ -198,11 +198,11 @@ def add_unknown_player(db_connection, player_stats_dict: Dict, game_id: str,
             weight_pounds = player_details['weight_pounds']
             years_experience = player_details['years_experience']
             
-            logger.info(f"  Fetched details: {position}, {height_inches}\" tall, {weight_pounds} lbs, "
+            logger.info(f"  📊 Fetched details: {position}, {height_inches}\" tall, {weight_pounds} lbs, "
                       f"{years_experience} years exp, age {age}, team: {team_id}")
         else:
             # Fallback to defaults if API call fails
-            logger.warning(f"  Using default values for {player_name}")
+            logger.warning(f"  ⚠️ Using default values for {player_name}")
             team_id = game_team_id
             age = None
             position = 'G'
@@ -212,7 +212,7 @@ def add_unknown_player(db_connection, player_stats_dict: Dict, game_id: str,
         
         # Final validation: make sure the team exists
         if not team_exists_func(team_id):
-            logger.error(f"  Team {team_id} does not exist in database, cannot add player")
+            logger.error(f"  ❌ Team {team_id} does not exist in database, cannot add player")
             return False
         
         with db_connection as conn:
@@ -245,9 +245,9 @@ def add_unknown_player(db_connection, player_stats_dict: Dict, game_id: str,
             conn.commit()
             cursor.close()
             
-        logger.info(f"Successfully added player {player_name} ({player_id}) to team {team_id}")
+        logger.info(f"✅ Successfully added player {player_name} ({player_id}) to team {team_id}")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to add unknown player {player_id}: {e}")
+        logger.error(f"❌ Failed to add unknown player {player_id}: {e}")
         return False
