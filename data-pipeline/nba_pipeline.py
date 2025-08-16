@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NBA Data Pipeline - Main Orchestrator
+NBA Data Pipeline - Main Orchestrator (Simplified)
 Coordinates team initialization, player initialization, and data extraction
 """
 
@@ -11,8 +11,8 @@ from typing import Dict
 
 from initialize_teams import TeamInitializer
 from initialize_active_players import PlayerInitializer
-from extract_nba_data import NBADataExtractor
-from extract_nba_advanced_stats import NBAAdvancedStatsExtractor
+from extractors.traditionalExtractor import TraditionalStatsExtractor
+from extractors.advancedExtractor import AdvancedStatsExtractor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,8 +26,8 @@ class NBADataPipeline:
         self.db_config = db_config
         self.team_initializer = TeamInitializer(db_config)
         self.player_initializer = PlayerInitializer(db_config)
-        self.data_extractor = NBADataExtractor(db_config)
-        self.advanced_extractor = NBAAdvancedStatsExtractor(db_config)
+        self.traditional_extractor = TraditionalStatsExtractor(db_config)
+        self.advanced_extractor = AdvancedStatsExtractor(db_config)
     
     def clear_all_data(self):
         """Clear all data from database in correct order"""
@@ -97,7 +97,7 @@ class NBADataPipeline:
         
         # First load traditional stats (games, players, teams)
         logger.info("📊 Loading traditional stats...")
-        self.data_extractor.extract_games_for_date(target_date)
+        self.traditional_extractor.extract_games_for_date(target_date)
         
         # Then load advanced stats if requested
         if load_advanced:
@@ -117,7 +117,7 @@ class NBADataPipeline:
         
         # First load traditional stats for the entire range
         logger.info("📊 Loading traditional stats for date range...")
-        self.data_extractor.extract_games_for_date_range(start_date, end_date)
+        self.traditional_extractor.extract_games_for_date_range(start_date, end_date)
         
         # Then load advanced stats if requested
         if load_advanced:
