@@ -2,6 +2,14 @@
 const express = require('express');
 const router = express.Router();
 
+// Import updated query builder
+const { 
+  buildReportQuery, 
+  validateFilters, 
+  getAvailableFilterTypes, 
+  hasAdvancedFilters 
+} = require('../utils/queryBuilder');
+
 // Test if database module loads properly
 let query;
 try {
@@ -19,306 +27,117 @@ try {
 /**
  * Maps frontend filter/column names to database column names
  */
-const getColumnMapping = (measure) => {
+const getColumnMapping = (measure, isAdvanced = false) => {
   if (measure === 'Players') {
-    return {
-      'Name': 'p.name',
-      'TEAM': 't.team_code',
-      'AGE': 'p.age',
-      'Games Played': 'COUNT(*)',
-      'PTS': 'AVG(pgs.points)',
-      'MINS': 'AVG(pgs.minutes_played)',
-      'FGM': 'AVG(pgs.field_goals_made)',
-      'FGA': 'AVG(pgs.field_goals_attempted)',
-      'FG%': 'AVG(pgs.field_goal_percentage)',
-      '3PM': 'AVG(pgs.three_pointers_made)',
-      '3PA': 'AVG(pgs.three_pointers_attempted)',
-      '3P%': 'AVG(pgs.three_point_percentage)',
-      'FTM': 'AVG(pgs.free_throws_made)',
-      'FTA': 'AVG(pgs.free_throws_attempted)',
-      'FT%': 'AVG(pgs.free_throw_percentage)',
-      'OREB': 'AVG(pgs.offensive_rebounds)',
-      'DREB': 'AVG(pgs.defensive_rebounds)',
-      'REB': 'AVG(pgs.total_rebounds)',
-      'AST': 'AVG(pgs.assists)',
-      'TOV': 'AVG(pgs.turnovers)',
-      'STL': 'AVG(pgs.steals)',
-      'BLK': 'AVG(pgs.blocks)',
-      'PF': 'AVG(pgs.personal_fouls)',
-      '+/-': 'AVG(pgs.plus_minus)',
-      
-      // For filtering (individual game stats)
-      'Team': 't.team_code',
-      'Age': 'p.age'
-    };
-  } else {
-    return {
-      'Team': 't.team_code',
-      'Games Played': 'COUNT(*)',
-      'Wins': 'SUM(CASE WHEN tgs.win = TRUE THEN 1 ELSE 0 END)',
-      'Losses': 'SUM(CASE WHEN tgs.win = FALSE THEN 1 ELSE 0 END)',
-      'Win %': 'ROUND(SUM(CASE WHEN tgs.win = TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1)',
-      'PTS': 'AVG(tgs.points)',
-      'FGM': 'AVG(tgs.field_goals_made)',
-      'FGA': 'AVG(tgs.field_goals_attempted)',
-      'FG%': 'AVG(tgs.field_goal_percentage)',
-      '3PM': 'AVG(tgs.three_pointers_made)',
-      '3PA': 'AVG(tgs.three_pointers_attempted)',
-      '3P%': 'AVG(tgs.three_point_percentage)',
-      'FTM': 'AVG(tgs.free_throws_made)',
-      'FTA': 'AVG(tgs.free_throws_attempted)',
-      'FT%': 'AVG(tgs.free_throw_percentage)',
-      'OREB': 'AVG(tgs.offensive_rebounds)',
-      'DREB': 'AVG(tgs.defensive_rebounds)',
-      'REB': 'AVG(tgs.total_rebounds)',
-      'AST': 'AVG(tgs.assists)',
-      'TOV': 'AVG(tgs.turnovers)',
-      'STL': 'AVG(tgs.steals)',
-      'BLK': 'AVG(tgs.blocks)',
-      '+/-': 'AVG(tgs.plus_minus)',
-      
-      // For filtering
-      'Points': 'tgs.points',
-      'Wins': 'tgs.win'
-    };
-  }
-};
-
-/**
- * Build WHERE clause for a single filter
- */
-const buildFilterClause = (filter, measure, paramIndex) => {
-  const columnMap = getColumnMapping(measure);
-  const filterType = filter.type;
-  const operator = filter.operator;
-  
-  // Map filter type to database column for WHERE clauses
-  let dbColumn;
-  if (measure === 'Players') {
-    const filterColumnMap = {
-      'Team': 't.team_code',
-      'Age': 'p.age',
-      'PTS': 'pgs.points',
-      'MINS': 'pgs.minutes_played',
-      'FGM': 'pgs.field_goals_made',
-      'FGA': 'pgs.field_goals_attempted',
-      'FG%': 'pgs.field_goal_percentage',
-      '3PM': 'pgs.three_pointers_made',
-      '3PA': 'pgs.three_pointers_attempted',
-      '3P%': 'pgs.three_point_percentage',
-      'FTM': 'pgs.free_throws_made',
-      'FTA': 'pgs.free_throws_attempted',
-      'FT%': 'pgs.free_throw_percentage',
-      'OREB': 'pgs.offensive_rebounds',
-      'DREB': 'pgs.defensive_rebounds',
-      'REB': 'pgs.total_rebounds',
-      'AST': 'pgs.assists',
-      'TOV': 'pgs.turnovers',
-      'STL': 'pgs.steals',
-      'BLK': 'pgs.blocks',
-      'PF': 'pgs.personal_fouls',
-      '+/-': 'pgs.plus_minus'
-    };
-    dbColumn = filterColumnMap[filterType];
-  } else {
-    const filterColumnMap = {
-      'Points': 'tgs.points',
-      'Wins': 'CASE WHEN tgs.win = TRUE THEN 1 ELSE 0 END',
-      'Games Played': '1', // This will be handled in HAVING clause
-      'FGM': 'tgs.field_goals_made',
-      'FGA': 'tgs.field_goals_attempted',
-      'FG%': 'tgs.field_goal_percentage',
-      '3PM': 'tgs.three_pointers_made',
-      'FTM': 'tgs.free_throws_made',
-      'FTA': 'tgs.free_throws_attempted',
-      'FT%': 'tgs.free_throw_percentage',
-      'OREB': 'tgs.offensive_rebounds',
-      'DREB': 'tgs.defensive_rebounds',
-      'REB': 'tgs.total_rebounds',
-      'AST': 'tgs.assists',
-      'TOV': 'tgs.turnovers',
-      'STL': 'tgs.steals',
-      'BLK': 'tgs.blocks',
-      '+/-': 'tgs.plus_minus'
-    };
-    dbColumn = filterColumnMap[filterType];
-  }
-  
-  if (!dbColumn) {
-    return { clause: null, params: [] };
-  }
-  
-  let clause;
-  let params = [];
-  
-  switch (operator) {
-    case 'greater than':
-      clause = `${dbColumn} > $${paramIndex}`;
-      params = [filter.value];
-      break;
-    case 'less than':
-      clause = `${dbColumn} < $${paramIndex}`;
-      params = [filter.value];
-      break;
-    case 'equals':
-      clause = `${dbColumn} = $${paramIndex}`;
-      params = [filter.value];
-      break;
-    case 'between':
-      clause = `${dbColumn} BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
-      params = [filter.value, filter.value2];
-      break;
-    case 'in':
-      const placeholders = filter.values.map((_, i) => `$${paramIndex + i}`).join(', ');
-      clause = `${dbColumn} IN (${placeholders})`;
-      params = filter.values;
-      break;
-    default:
-      return { clause: null, params: [] };
-  }
-  
-  return { clause, params };
-};
-
-/**
- * Build complete SQL query for report generation
- */
-const buildReportQuery = (measure, filters, sortConfig) => {
-  let baseQuery;
-  let params = [];
-  let paramIndex = 1;
-  
-  if (measure === 'Players') {
-    baseQuery = `
-      SELECT 
-        p.name,
-        t.team_code as team,
-        p.age,
-        COUNT(*) as games_played,
-        ROUND(AVG(pgs.minutes_played), 1) as mins,
-        ROUND(AVG(pgs.points), 1) as pts,
-        ROUND(AVG(pgs.field_goals_made), 1) as fgm,
-        ROUND(AVG(pgs.field_goals_attempted), 1) as fga,
-        ROUND(AVG(pgs.field_goal_percentage * 100), 1) as fg_pct,
-        ROUND(AVG(pgs.three_pointers_made), 1) as tpm,
-        ROUND(AVG(pgs.three_pointers_attempted), 1) as tpa,
-        ROUND(AVG(pgs.three_point_percentage * 100), 1) as tp_pct,
-        ROUND(AVG(pgs.free_throws_made), 1) as ftm,
-        ROUND(AVG(pgs.free_throws_attempted), 1) as fta,
-        ROUND(AVG(pgs.free_throw_percentage * 100), 1) as ft_pct,
-        ROUND(AVG(pgs.offensive_rebounds), 1) as oreb,
-        ROUND(AVG(pgs.defensive_rebounds), 1) as dreb,
-        ROUND(AVG(pgs.total_rebounds), 1) as reb,
-        ROUND(AVG(pgs.assists), 1) as ast,
-        ROUND(AVG(pgs.turnovers), 1) as tov,
-        ROUND(AVG(pgs.steals), 1) as stl,
-        ROUND(AVG(pgs.blocks), 1) as blk,
-        ROUND(AVG(pgs.plus_minus), 1) as plus_minus
-      FROM players p
-      JOIN teams t ON p.team_id = t.id
-      JOIN player_game_stats pgs ON p.id = pgs.player_id
-      JOIN games g ON pgs.game_id = g.id
-      WHERE 1=1
-    `;
-  } else {
-    baseQuery = `
-      SELECT 
-        t.team_code as team,
-        COUNT(*) as games_played,
-        SUM(CASE WHEN tgs.win = TRUE THEN 1 ELSE 0 END) as wins,
-        SUM(CASE WHEN tgs.win = FALSE THEN 1 ELSE 0 END) as losses,
-        ROUND(SUM(CASE WHEN tgs.win = TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) as win_pct,
-        ROUND(AVG(tgs.points), 1) as pts,
-        ROUND(AVG(tgs.field_goals_made), 1) as fgm,
-        ROUND(AVG(tgs.field_goals_attempted), 1) as fga,
-        ROUND(AVG(tgs.field_goal_percentage * 100), 1) as fg_pct,
-        ROUND(AVG(tgs.three_pointers_made), 1) as tpm,
-        ROUND(AVG(tgs.three_pointers_attempted), 1) as tpa,
-        ROUND(AVG(tgs.three_point_percentage * 100), 1) as tp_pct,
-        ROUND(AVG(tgs.free_throws_made), 1) as ftm,
-        ROUND(AVG(tgs.free_throws_attempted), 1) as fta,
-        ROUND(AVG(tgs.free_throw_percentage * 100), 1) as ft_pct,
-        ROUND(AVG(tgs.offensive_rebounds), 1) as oreb,
-        ROUND(AVG(tgs.defensive_rebounds), 1) as dreb,
-        ROUND(AVG(tgs.total_rebounds), 1) as reb,
-        ROUND(AVG(tgs.assists), 1) as ast,
-        ROUND(AVG(tgs.turnovers), 1) as tov,
-        ROUND(AVG(tgs.steals), 1) as stl,
-        ROUND(AVG(tgs.blocks), 1) as blk,
-        ROUND(AVG(tgs.plus_minus), 1) as plus_minus
-      FROM teams t
-      JOIN team_game_stats tgs ON t.id = tgs.team_id
-      JOIN games g ON tgs.game_id = g.id
-      WHERE 1=1
-    `;
-  }
-  
-  // Add filter conditions
-  const whereClauses = [];
-  filters.forEach(filter => {
-    const { clause, params: filterParams } = buildFilterClause(filter, measure, paramIndex);
-    if (clause) {
-      whereClauses.push(clause);
-      params.push(...filterParams);
-      paramIndex += filterParams.length;
+    if (isAdvanced) {
+      return {
+        'Name': 'p.name',
+        'TEAM': 't.team_code',
+        'AGE': 'p.age',
+        'Games Played': 'COUNT(*)',
+        'Offensive Rating': 'AVG(pas.offensive_rating)',
+        'Defensive Rating': 'AVG(pas.defensive_rating)',
+        'Net Rating': 'AVG(pas.net_rating)',
+        'Usage %': 'AVG(pas.usage_percentage)',
+        'True Shooting %': 'AVG(pas.true_shooting_percentage)',
+        'Effective FG%': 'AVG(pas.effective_field_goal_percentage)',
+        'Assist %': 'AVG(pas.assist_percentage)',
+        'Assist Turnover Ratio': 'AVG(pas.assist_turnover_ratio)',
+        'Assist Ratio': 'AVG(pas.assist_ratio)',
+        'Offensive Rebound %': 'AVG(pas.offensive_rebound_percentage)',
+        'Defensive Rebound %': 'AVG(pas.defensive_rebound_percentage)',
+        'Rebound %': 'AVG(pas.rebound_percentage)',
+        'Turnover %': 'AVG(pas.turnover_percentage)',
+        'PIE': 'AVG(pas.pie)',
+        'Pace': 'AVG(pas.pace)',
+        
+        // For filtering (individual game stats)
+        'Team': 't.team_code',
+        'Age': 'p.age'
+      };
+    } else {
+      return {
+        'Name': 'p.name',
+        'TEAM': 't.team_code',
+        'AGE': 'p.age',
+        'Games Played': 'COUNT(*)',
+        'PTS': 'AVG(pgs.points)',
+        'MINS': 'AVG(pgs.minutes_played)',
+        'FGM': 'AVG(pgs.field_goals_made)',
+        'FGA': 'AVG(pgs.field_goals_attempted)',
+        'FG%': 'AVG(pgs.field_goal_percentage)',
+        '3PM': 'AVG(pgs.three_pointers_made)',
+        '3PA': 'AVG(pgs.three_pointers_attempted)',
+        '3P%': 'AVG(pgs.three_point_percentage)',
+        'FTM': 'AVG(pgs.free_throws_made)',
+        'FTA': 'AVG(pgs.free_throws_attempted)',
+        'FT%': 'AVG(pgs.free_throw_percentage)',
+        'OREB': 'AVG(pgs.offensive_rebounds)',
+        'DREB': 'AVG(pgs.defensive_rebounds)',
+        'REB': 'AVG(pgs.total_rebounds)',
+        'AST': 'AVG(pgs.assists)',
+        'TOV': 'AVG(pgs.turnovers)',
+        'STL': 'AVG(pgs.steals)',
+        'BLK': 'AVG(pgs.blocks)',
+        'PF': 'AVG(pgs.personal_fouls)',
+        '+/-': 'AVG(pgs.plus_minus)',
+        
+        // For filtering (individual game stats)
+        'Team': 't.team_code',
+        'Age': 'p.age'
+      };
     }
-  });
-  
-  if (whereClauses.length > 0) {
-    baseQuery += ` AND ${whereClauses.join(' AND ')}`;
-  }
-  
-  // Add GROUP BY clause
-  if (measure === 'Players') {
-    baseQuery += ` GROUP BY p.id, p.name, t.team_code, p.age`;
   } else {
-    baseQuery += ` GROUP BY t.id, t.team_code`;
-  }
-  
-  // Add sorting
-  if (sortConfig && sortConfig.column) {
-    const columnMap = getColumnMapping(measure);
-    let sortColumn;
-    
-    // Map display column to actual column name for sorting
-    switch (sortConfig.column) {
-      case 'Name': sortColumn = 'p.name'; break;
-      case 'TEAM': case 'Team': sortColumn = 't.team_code'; break;
-      case 'AGE': sortColumn = 'p.age'; break;
-      case 'Games Played': sortColumn = 'games_played'; break;
-      case 'Minutes Played': sortColumn = 'minutes_played'; break;
-      case 'Wins': sortColumn = 'wins'; break;
-      case 'Losses': sortColumn = 'losses'; break;
-      case 'Win %': sortColumn = 'win_pct'; break;
-      case 'PTS': sortColumn = 'pts'; break;
-      case 'FGM': sortColumn = 'fgm'; break;
-      case 'FGA': sortColumn = 'fga'; break;
-      case 'FG%': sortColumn = 'fg_pct'; break;
-      case '3PM': sortColumn = 'tpm'; break;
-      case '3PA': sortColumn = 'tpa'; break;
-      case '3P%': sortColumn = 'tp_pct'; break;
-      case 'FTM': sortColumn = 'ftm'; break;
-      case 'FTA': sortColumn = 'fta'; break;
-      case 'FT%': sortColumn = 'ft_pct'; break;
-      case 'OREB': sortColumn = 'oreb'; break;
-      case 'DREB': sortColumn = 'dreb'; break;
-      case 'REB': sortColumn = 'reb'; break;
-      case 'AST': sortColumn = 'ast'; break;
-      case 'TOV': sortColumn = 'tov'; break;
-      case 'STL': sortColumn = 'stl'; break;
-      case 'BLK': sortColumn = 'blk'; break;
-      case '+/-': sortColumn = 'plus_minus'; break;
-      default: sortColumn = 'pts'; // Default fallback
+    if (isAdvanced) {
+      return {
+        'Team': 't.team_code',
+        'Games Played': 'COUNT(*)',
+        'Offensive Rating': 'AVG(tas.offensive_rating)',
+        'Defensive Rating': 'AVG(tas.defensive_rating)',
+        'Net Rating': 'AVG(tas.net_rating)',
+        'True Shooting %': 'AVG(tas.true_shooting_percentage)',
+        'Effective FG%': 'AVG(tas.effective_field_goal_percentage)',
+        'Assist %': 'AVG(tas.assist_percentage)',
+        'Assist Turnover Ratio': 'AVG(tas.assist_turnover_ratio)',
+        'Offensive Rebound %': 'AVG(tas.offensive_rebound_percentage)',
+        'Defensive Rebound %': 'AVG(tas.defensive_rebound_percentage)',
+        'Rebound %': 'AVG(tas.rebound_percentage)',
+        'Turnover %': 'AVG(tas.turnover_percentage)',
+        'PIE': 'AVG(tas.pie)',
+        'Pace': 'AVG(tas.pace)'
+      };
+    } else {
+      return {
+        'Team': 't.team_code',
+        'Games Played': 'COUNT(*)',
+        'Wins': 'SUM(CASE WHEN tgs.win = TRUE THEN 1 ELSE 0 END)',
+        'Losses': 'SUM(CASE WHEN tgs.win = FALSE THEN 1 ELSE 0 END)',
+        'Win %': 'ROUND(SUM(CASE WHEN tgs.win = TRUE THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1)',
+        'PTS': 'AVG(tgs.points)',
+        'FGM': 'AVG(tgs.field_goals_made)',
+        'FGA': 'AVG(tgs.field_goals_attempted)',
+        'FG%': 'AVG(tgs.field_goal_percentage)',
+        '3PM': 'AVG(tgs.three_pointers_made)',
+        '3PA': 'AVG(tgs.three_pointers_attempted)',
+        '3P%': 'AVG(tgs.three_point_percentage)',
+        'FTM': 'AVG(tgs.free_throws_made)',
+        'FTA': 'AVG(tgs.free_throws_attempted)',
+        'FT%': 'AVG(tgs.free_throw_percentage)',
+        'OREB': 'AVG(tgs.offensive_rebounds)',
+        'DREB': 'AVG(tgs.defensive_rebounds)',
+        'REB': 'AVG(tgs.total_rebounds)',
+        'AST': 'AVG(tgs.assists)',
+        'TOV': 'AVG(tgs.turnovers)',
+        'STL': 'AVG(tgs.steals)',
+        'BLK': 'AVG(tgs.blocks)',
+        '+/-': 'AVG(tgs.plus_minus)',
+        
+        // For filtering
+        'Points': 'tgs.points',
+        'Wins': 'tgs.win'
+      };
     }
-    
-    const direction = sortConfig.direction === 'asc' ? 'ASC' : 'DESC';
-    baseQuery += ` ORDER BY ${sortColumn} ${direction}`;
   }
-  
-  // Add limit for performance
-  baseQuery += ` LIMIT 100`;
-  
-  return { sql: baseQuery, params };
 };
 
 /**
@@ -327,7 +146,7 @@ const buildReportQuery = (measure, filters, sortConfig) => {
  */
 router.post('/generate', async (req, res) => {
   try {
-    const { measure, filters, sortConfig } = req.body;
+    const { measure, filters, sortConfig, viewType } = req.body;
     
     // Validate required fields
     if (!measure) {
@@ -344,13 +163,26 @@ router.post('/generate', async (req, res) => {
       });
     }
     
-    console.log(`🔍 Generating ${measure} report with ${filters.length} filters`);
+    // Validate filters
+    const filterErrors = validateFilters(filters, measure);
+    if (filterErrors.length > 0) {
+      return res.status(400).json({
+        error: 'Invalid filters',
+        message: filterErrors.join(', ')
+      });
+    }
     
-    // Build and execute query
-    const { sql, params } = buildReportQuery(measure, filters, sortConfig);
+    // Determine if we should use advanced stats
+    const isAdvancedRequest = viewType === 'advanced' || hasAdvancedFilters(filters);
     
-    console.log('📊 Executing SQL:', sql);
+    console.log(`🔍 Generating ${measure} report with ${filters.length} filters (${isAdvancedRequest ? 'Advanced' : 'Traditional'} stats)`);
+    
+    // Build and execute query using the enhanced query builder
+    const { sql, params, isAdvanced } = buildReportQuery(measure, filters, sortConfig, 100, viewType);
+    
+    console.log('📊 Executing SQL:', sql.substring(0, 200) + '...');
     console.log('🎯 Parameters:', params);
+    console.log('📈 Advanced View:', isAdvanced);
     
     const result = await query(sql, params);
     
@@ -361,6 +193,8 @@ router.post('/generate', async (req, res) => {
       measure,
       filters,
       sortConfig,
+      viewType: isAdvanced ? 'advanced' : 'traditional',
+      autoSwitched: isAdvanced && (!viewType || viewType === 'traditional'),
       count: result.rows.length,
       results: result.rows
     });
@@ -377,13 +211,114 @@ router.post('/generate', async (req, res) => {
 });
 
 /**
+ * GET /api/reports/filters/:measure
+ * Get available filter types for a specific measure
+ */
+router.get('/filters/:measure', async (req, res) => {
+  try {
+    const { measure } = req.params;
+    const { type } = req.query; // 'traditional', 'advanced', or 'all'
+    
+    if (!['Players', 'Teams'].includes(measure)) {
+      return res.status(400).json({
+        error: 'Invalid measure',
+        message: 'Measure must be either "Players" or "Teams"'
+      });
+    }
+    
+    const filterTypes = getAvailableFilterTypes(measure);
+    
+    let response;
+    switch (type) {
+      case 'traditional':
+        response = { filters: filterTypes.traditional };
+        break;
+      case 'advanced':
+        response = { filters: filterTypes.advanced };
+        break;
+      case 'all':
+      default:
+        response = {
+          traditional: filterTypes.traditional,
+          advanced: filterTypes.advanced,
+          all: filterTypes.all
+        };
+        break;
+    }
+    
+    res.json({
+      success: true,
+      measure,
+      ...response
+    });
+    
+  } catch (error) {
+    console.error('❌ Filter types fetch error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch filter types',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/reports/validate
+ * Validate a report configuration before execution
+ */
+router.post('/validate', async (req, res) => {
+  try {
+    const { measure, filters, sortConfig, viewType } = req.body;
+    
+    const issues = [];
+    
+    // Validate measure
+    if (!measure || !['Players', 'Teams'].includes(measure)) {
+      issues.push('Invalid or missing measure. Must be "Players" or "Teams".');
+    }
+    
+    // Validate filters
+    if (!filters || !Array.isArray(filters) || filters.length === 0) {
+      issues.push('At least one filter is required.');
+    } else {
+      const filterErrors = validateFilters(filters, measure);
+      issues.push(...filterErrors);
+    }
+    
+    // Check for advanced filter usage
+    const hasAdvanced = filters ? hasAdvancedFilters(filters) : false;
+    const recommendedView = hasAdvanced ? 'advanced' : 'traditional';
+    
+    res.json({
+      success: true,
+      valid: issues.length === 0,
+      issues,
+      recommendations: {
+        viewType: recommendedView,
+        autoSwitch: hasAdvanced && viewType !== 'advanced',
+        message: hasAdvanced 
+          ? 'Advanced filters detected. Consider using advanced view for best results.'
+          : 'Traditional filters detected. Using traditional view.'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Validation error:', error);
+    res.status(500).json({
+      error: 'Validation failed',
+      message: error.message
+    });
+  }
+});
+
+/**
  * GET /api/reports/test
- * Test endpoint to verify database connection
+ * Test endpoint to verify database connection and table availability
  */
 router.get('/test', async (req, res) => {
   try {
-    const result = await query('SELECT COUNT(*) as player_count FROM players');
-    const playerCount = result.rows[0].player_count;
+    // Test traditional stats tables
+    const playerResult = await query('SELECT COUNT(*) as player_count FROM players');
+    const playerCount = playerResult.rows[0].player_count;
     
     const teamResult = await query('SELECT COUNT(*) as team_count FROM teams');
     const teamCount = teamResult.rows[0].team_count;
@@ -391,13 +326,44 @@ router.get('/test', async (req, res) => {
     const gameResult = await query('SELECT COUNT(*) as game_count FROM games');
     const gameCount = gameResult.rows[0].game_count;
     
+    const playerStatsResult = await query('SELECT COUNT(*) as player_stats_count FROM player_game_stats');
+    const playerStatsCount = playerStatsResult.rows[0].player_stats_count;
+    
+    const teamStatsResult = await query('SELECT COUNT(*) as team_stats_count FROM team_game_stats');
+    const teamStatsCount = teamStatsResult.rows[0].team_stats_count;
+    
+    // Test advanced stats tables
+    let advancedStatsAvailable = false;
+    let playerAdvancedCount = 0;
+    let teamAdvancedCount = 0;
+    
+    try {
+      const playerAdvancedResult = await query('SELECT COUNT(*) as player_advanced_count FROM player_advanced_stats');
+      playerAdvancedCount = playerAdvancedResult.rows[0].player_advanced_count;
+      
+      const teamAdvancedResult = await query('SELECT COUNT(*) as team_advanced_count FROM team_advanced_stats');
+      teamAdvancedCount = teamAdvancedResult.rows[0].team_advanced_count;
+      
+      advancedStatsAvailable = true;
+    } catch (advancedError) {
+      console.warn('⚠️ Advanced stats tables not available:', advancedError.message);
+    }
+    
     res.json({
       status: 'success',
       database: 'connected',
       data: {
         players: parseInt(playerCount),
         teams: parseInt(teamCount),
-        games: parseInt(gameCount)
+        games: parseInt(gameCount),
+        playerStats: parseInt(playerStatsCount),
+        teamStats: parseInt(teamStatsCount),
+        playerAdvancedStats: parseInt(playerAdvancedCount),
+        teamAdvancedStats: parseInt(teamAdvancedCount)
+      },
+      features: {
+        traditionalStats: true,
+        advancedStats: advancedStatsAvailable
       },
       timestamp: new Date().toISOString()
     });
@@ -434,6 +400,88 @@ router.get('/teams', async (req, res) => {
     console.error('❌ Teams fetch error:', error);
     res.status(500).json({
       error: 'Failed to fetch teams',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/reports/sample/:measure
+ * Get sample data for a measure type (for UI development and testing)
+ */
+router.get('/sample/:measure', async (req, res) => {
+  try {
+    const { measure } = req.params;
+    const { view = 'traditional', limit = 5 } = req.query;
+    
+    if (!['Players', 'Teams'].includes(measure)) {
+      return res.status(400).json({
+        error: 'Invalid measure',
+        message: 'Measure must be either "Players" or "Teams"'
+      });
+    }
+    
+    const isAdvanced = view === 'advanced';
+    const { sql } = buildReportQuery(measure, [], null, parseInt(limit), view);
+    const result = await query(sql);
+    
+    res.json({
+      success: true,
+      measure,
+      view,
+      sampleData: result.rows,
+      columns: Object.keys(result.rows[0] || {}),
+      count: result.rows.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Sample data fetch error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch sample data',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/reports/stats
+ * Get database statistics for monitoring
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    // Get table sizes and row counts
+    const stats = await query(`
+      SELECT 
+        schemaname,
+        tablename,
+        pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
+        pg_total_relation_size(schemaname||'.'||tablename) as size_bytes
+      FROM pg_tables 
+      WHERE schemaname = 'public'
+      ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
+    `);
+    
+    // Get recent query performance (if available)
+    const recentGames = await query(`
+      SELECT COUNT(*) as count, MAX(game_date) as latest_game
+      FROM games 
+      WHERE game_date >= CURRENT_DATE - INTERVAL '30 days'
+    `);
+    
+    res.json({
+      success: true,
+      tableStats: stats.rows,
+      recentActivity: {
+        gamesLast30Days: parseInt(recentGames.rows[0].count),
+        latestGame: recentGames.rows[0].latest_game
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Stats fetch error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch statistics',
       message: error.message
     });
   }

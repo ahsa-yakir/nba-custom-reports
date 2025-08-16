@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, Play, Save, BarChart3, Filter, Target, Check, ChevronUp, ChevronDown, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { X, Download, Play, Save, BarChart3, Filter, Target, Check, ChevronUp, ChevronDown, Wifi, WifiOff, Loader2, Eye } from 'lucide-react';
 import { apiService } from '../services/api';
 
 const CustomReportsBuilder = () => {
@@ -11,12 +11,29 @@ const CustomReportsBuilder = () => {
   const [newFilter, setNewFilter] = useState({ 
     type: '', operator: '', value: '', value2: '', values: [] 
   });
+  const [viewType, setViewType] = useState('traditional');
 
-  // NEW STATE FOR API INTEGRATION
+  // API INTEGRATION STATE
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState('unknown'); // 'connected', 'failed', 'unknown'
+  const [connectionStatus, setConnectionStatus] = useState('unknown');
   const [apiError, setApiError] = useState(null);
-  const [teams, setTeams] = useState([]); // Store teams from API
+  const [teams, setTeams] = useState([]);
+
+  // Auto-detect advanced view when advanced filters are added
+  useEffect(() => {
+    const hasAdvancedFilters = filters.some(filter => {
+      const advancedFilterTypes = [
+        'Offensive Rating', 'Defensive Rating', 'Net Rating', 'Usage %', 'True Shooting %',
+        'Effective FG%', 'Assist %', 'Rebound %', 'Turnover %', 'PIE', 'Pace',
+        'Assist Turnover Ratio', 'Assist Ratio', 'Offensive Rebound %', 'Defensive Rebound %'
+      ];
+      return advancedFilterTypes.includes(filter.type);
+    });
+    
+    if (hasAdvancedFilters && viewType === 'traditional') {
+      setViewType('advanced');
+    }
+  }, [filters, viewType]);
 
   // CONNECTION TEST ON COMPONENT MOUNT
   useEffect(() => {
@@ -33,7 +50,7 @@ const CustomReportsBuilder = () => {
       if (result.status === 'connected') {
         setConnectionStatus('connected');
         setApiError(null);
-        console.log('✅ Backend connection successful');
+        console.log('Backend connection successful');
       } else {
         setConnectionStatus('failed');
         setApiError(result.error);
@@ -41,7 +58,7 @@ const CustomReportsBuilder = () => {
     } catch (error) {
       setConnectionStatus('failed');
       setApiError(error.message);
-      console.error('❌ Backend connection failed:', error.message);
+      console.error('Backend connection failed:', error.message);
     }
   };
 
@@ -53,15 +70,15 @@ const CustomReportsBuilder = () => {
       }
     } catch (error) {
       console.error('Failed to load teams:', error);
-      // Fallback to hardcoded teams if API fails
       setTeams(['BOS', 'MIL', 'PHI', 'LAL', 'GSW', 'DAL', 'DEN', 'OKC']);
     }
   };
 
-  // FILTER MANAGEMENT (Updated for API)
+  // FILTER OPTIONS INCLUDING ADVANCED STATS
   const getFilterOptions = (measure) => {
     if (measure === 'Teams') {
       return [
+        // Traditional team filters
         { type: 'Wins', operators: ['greater than', 'less than', 'between'] },
         { type: 'Games Played', operators: ['greater than', 'less than', 'between'] },
         { type: 'Points', operators: ['greater than', 'less than', 'between'] },
@@ -80,9 +97,25 @@ const CustomReportsBuilder = () => {
         { type: 'STL', operators: ['greater than', 'less than', 'between'] },
         { type: 'BLK', operators: ['greater than', 'less than', 'between'] },
         { type: '+/-', operators: ['greater than', 'less than', 'between'] },
+        
+        // Advanced team filters
+        { type: 'Offensive Rating', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Defensive Rating', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Net Rating', operators: ['greater than', 'less than', 'between'] },
+        { type: 'True Shooting %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Effective FG%', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Assist %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Assist Turnover Ratio', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Offensive Rebound %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Defensive Rebound %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Rebound %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Turnover %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'PIE', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Pace', operators: ['greater than', 'less than', 'between'] },
       ];
     } else if (measure === 'Players') {
       return [
+        // Traditional player filters
         { type: 'Team', operators: ['equals', 'in'], options: teams },
         { type: 'Age', operators: ['greater than', 'less than', 'equals', 'between'] },
         { type: 'Games Played', operators: ['greater than', 'less than', 'between'] },
@@ -105,6 +138,23 @@ const CustomReportsBuilder = () => {
         { type: 'BLK', operators: ['greater than', 'less than', 'between'] },
         { type: 'PF', operators: ['greater than', 'less than', 'between'] },
         { type: '+/-', operators: ['greater than', 'less than', 'between'] },
+        
+        // Advanced player filters
+        { type: 'Offensive Rating', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Defensive Rating', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Net Rating', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Usage %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'True Shooting %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Effective FG%', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Assist %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Assist Turnover Ratio', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Assist Ratio', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Offensive Rebound %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Defensive Rebound %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Rebound %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Turnover %', operators: ['greater than', 'less than', 'between'] },
+        { type: 'PIE', operators: ['greater than', 'less than', 'between'] },
+        { type: 'Pace', operators: ['greater than', 'less than', 'between'] },
       ];
     }
     return [];
@@ -130,7 +180,7 @@ const CustomReportsBuilder = () => {
     setFilters(filters.filter(filter => filter.id !== filterId));
   };
 
-  // REPORT GENERATION (Updated for API)
+  // REPORT GENERATION WITH VIEW TYPE
   const generateReport = async () => {
     if (!measure || filters.length === 0) return;
 
@@ -138,7 +188,7 @@ const CustomReportsBuilder = () => {
     setApiError(null);
 
     try {
-      console.log('🔄 Generating report...', { measure, filters, sortConfig });
+      console.log('Generating report...', { measure, filters, sortConfig, viewType });
 
       const reportConfig = {
         measure,
@@ -149,28 +199,35 @@ const CustomReportsBuilder = () => {
           value2: filter.value2,
           values: filter.values
         })),
-        sortConfig: sortConfig.column ? sortConfig : null
+        sortConfig: sortConfig.column ? sortConfig : null,
+        viewType: viewType
       };
 
       const response = await apiService.generateReport(reportConfig);
       
       if (response.success && response.results) {
-        console.log(`✅ Report generated: ${response.count} results`);
+        console.log(`Report generated: ${response.count} results`);
         setReportResults(response.results);
         
         // Set default sorting if none specified
         if (!sortConfig.column) {
           if (measure === 'Players') {
-            setSortConfig({ column: 'PTS', direction: 'desc' });
+            setSortConfig({ 
+              column: viewType === 'advanced' ? 'Offensive Rating' : 'PTS', 
+              direction: 'desc' 
+            });
           } else if (measure === 'Teams') {
-            setSortConfig({ column: 'Wins', direction: 'desc' });
+            setSortConfig({ 
+              column: viewType === 'advanced' ? 'Net Rating' : 'Wins', 
+              direction: 'desc' 
+            });
           }
         }
       } else {
         throw new Error('Invalid response format');
       }
     } catch (error) {
-      console.error('❌ Report generation failed:', error);
+      console.error('Report generation failed:', error);
       setApiError(error.message);
       setReportResults([]);
     } finally {
@@ -178,12 +235,13 @@ const CustomReportsBuilder = () => {
     }
   };
 
-  // SORTING (Updated for API data format)
+  // FORMAT API RESULTS
   const formatApiResults = (results) => {
-    // Convert API results to frontend format
     return results.map(item => {
-      // Map database column names to frontend property names
-      return {
+      // Debug log to see what we're getting from the API
+      console.log('Raw API item:', item);
+      
+      const baseData = {
         name: item.name,
         team: item.team || item.team_code,
         age: parseInt(item.age) || 0,
@@ -211,9 +269,30 @@ const CustomReportsBuilder = () => {
         blk: parseFloat(item.blk) || 0,
         plusMinus: parseFloat(item.plus_minus) || 0
       };
+
+      // Add advanced stats - the backend returns them with these exact names
+      baseData.offensiveRating = parseFloat(item.offensive_rating) || 0;
+      baseData.defensiveRating = parseFloat(item.defensive_rating) || 0;
+      baseData.netRating = parseFloat(item.net_rating) || 0;
+      baseData.usagePercentage = parseFloat(item.usage_percentage) || 0;
+      baseData.trueShootingPercentage = parseFloat(item.true_shooting_percentage) || 0;
+      baseData.effectiveFieldGoalPercentage = parseFloat(item.effective_field_goal_percentage) || 0;
+      baseData.assistPercentage = parseFloat(item.assist_percentage) || 0;
+      baseData.assistTurnoverRatio = parseFloat(item.assist_turnover_ratio) || 0;
+      baseData.assistRatio = parseFloat(item.assist_ratio) || 0;
+      baseData.offensiveReboundPercentage = parseFloat(item.offensive_rebound_percentage) || 0;
+      baseData.defensiveReboundPercentage = parseFloat(item.defensive_rebound_percentage) || 0;
+      baseData.reboundPercentage = parseFloat(item.rebound_percentage) || 0;
+      baseData.turnoverPercentage = parseFloat(item.turnover_percentage) || 0;
+      baseData.pie = parseFloat(item.pie) || 0;
+      baseData.pace = parseFloat(item.pace) || 0;
+
+      console.log('Formatted item:', baseData);
+      return baseData;
     });
   };
 
+  // SORTING
   const sortedData = React.useMemo(() => {
     if (reportResults.length === 0) return [];
 
@@ -221,14 +300,33 @@ const CustomReportsBuilder = () => {
 
     const getValueForSorting = (item, column) => {
       const columnMap = {
+        // Traditional columns
         'Team': 'team', 'Name': 'name', 'TEAM': 'team', 'AGE': 'age',
         'Games Played': 'gamesPlayed', 'Wins': 'wins', 'Losses': 'losses', 'Win %': 'winPct',
         'PTS': 'pts', 'MINS': 'mins', 'FGM': 'fgm', 'FGA': 'fga', 'FG%': 'fg_pct',
         '3PM': 'tpm', '3PA': 'tpa', '3P%': 'tp_pct',
         'FTM': 'ftm', 'FTA': 'fta', 'FT%': 'ft_pct',
         'OREB': 'oreb', 'DREB': 'dreb', 'REB': 'reb',
-        'AST': 'ast', 'TOV': 'tov', 'STL': 'stl', 'BLK': 'blk', '+/-': 'plusMinus'
+        'AST': 'ast', 'TOV': 'tov', 'STL': 'stl', 'BLK': 'blk', '+/-': 'plusMinus',
+        
+        // Advanced columns
+        'Offensive Rating': 'offensiveRating',
+        'Defensive Rating': 'defensiveRating',
+        'Net Rating': 'netRating',
+        'Usage %': 'usagePercentage',
+        'True Shooting %': 'trueShootingPercentage',
+        'Effective FG%': 'effectiveFieldGoalPercentage',
+        'Assist %': 'assistPercentage',
+        'Assist Turnover Ratio': 'assistTurnoverRatio',
+        'Assist Ratio': 'assistRatio',
+        'Offensive Rebound %': 'offensiveReboundPercentage',
+        'Defensive Rebound %': 'defensiveReboundPercentage',
+        'Rebound %': 'reboundPercentage',
+        'Turnover %': 'turnoverPercentage',
+        'PIE': 'pie',
+        'Pace': 'pace'
       };
+      
       return item[columnMap[column]] || '';
     };
 
@@ -556,36 +654,84 @@ const CustomReportsBuilder = () => {
     );
   };
 
+  // VIEW TYPE DROPDOWN
+  const renderViewTypeSelector = () => {
+    if (reportResults.length === 0) return null;
+
+    return (
+      <div className="flex items-center space-x-4 mb-6">
+        <div className="flex items-center space-x-2">
+          <Eye className="w-5 h-5 text-gray-600" />
+          <span className="text-sm font-medium text-gray-700">View:</span>
+        </div>
+        <select
+          value={viewType}
+          onChange={(e) => setViewType(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+        >
+          <option value="traditional">Traditional Stats</option>
+          <option value="advanced">Advanced Stats</option>
+        </select>
+      </div>
+    );
+  };
+
   // RESULTS TABLE
   const renderResults = () => {
     if (reportResults.length === 0) return null;
 
-    const getDefaultColumns = () => {
-      if (measure === 'Teams') {
-        return ['Team', 'Games Played', 'Wins', 'Losses', 'Win %', 'PTS', 'FGM', 'FGA', 'FG%', '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB', 'AST', 'TOV', 'STL', 'BLK', '+/-'];
+    const getColumns = () => {
+      if (viewType === 'advanced') {
+        if (measure === 'Teams') {
+          return ['Team', 'Games Played', 'Offensive Rating', 'Defensive Rating', 'Net Rating', 'True Shooting %', 'Effective FG%', 'Assist %', 'Assist Turnover Ratio', 'Offensive Rebound %', 'Defensive Rebound %', 'Rebound %', 'Turnover %', 'PIE', 'Pace'];
+        } else {
+          return ['Name', 'TEAM', 'AGE', 'Games Played', 'Offensive Rating', 'Defensive Rating', 'Net Rating', 'Usage %', 'True Shooting %', 'Effective FG%', 'Assist %', 'Assist Turnover Ratio', 'Assist Ratio', 'Offensive Rebound %', 'Defensive Rebound %', 'Rebound %', 'Turnover %', 'PIE', 'Pace'];
+        }
       } else {
-        return ['Name', 'TEAM', 'AGE', 'Games Played', 'MINS', 'PTS', 'FGM', 'FGA', 'FG%', '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB', 'AST', 'TOV', 'STL', 'BLK', '+/-'];
+        if (measure === 'Teams') {
+          return ['Team', 'Games Played', 'Wins', 'Losses', 'Win %', 'PTS', 'FGM', 'FGA', 'FG%', '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB', 'AST', 'TOV', 'STL', 'BLK', '+/-'];
+        } else {
+          return ['Name', 'TEAM', 'AGE', 'Games Played', 'MINS', 'PTS', 'FGM', 'FGA', 'FG%', '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB', 'AST', 'TOV', 'STL', 'BLK', '+/-'];
+        }
       }
     };
 
-    const columns = getDefaultColumns();
+    const columns = getColumns();
     
     const formatValue = (value, column) => {
-      if (column.includes('%')) {
-        return typeof value === 'number' ? value.toFixed(1) + '%' : value;
+      if (column.includes('%') || column.includes('Rating') || column === 'PIE' || column === 'Pace') {
+        return typeof value === 'number' ? value.toFixed(1) : value;
       }
       return typeof value === 'number' ? value.toFixed(1) : value;
     };
 
     const getValueForColumn = (item, column) => {
       const columnMap = {
+        // Traditional columns
         'Team': 'team', 'Name': 'name', 'TEAM': 'team', 'AGE': 'age',
         'Games Played': 'gamesPlayed', 'Wins': 'wins', 'Losses': 'losses', 'Win %': 'winPct',
         'PTS': 'pts', 'MINS': 'mins', 'FGM': 'fgm', 'FGA': 'fga', 'FG%': 'fg_pct',
         '3PM': 'tpm', '3PA': 'tpa', '3P%': 'tp_pct',
         'FTM': 'ftm', 'FTA': 'fta', 'FT%': 'ft_pct',
         'OREB': 'oreb', 'DREB': 'dreb', 'REB': 'reb',
-        'AST': 'ast', 'TOV': 'tov', 'STL': 'stl', 'BLK': 'blk', '+/-': 'plusMinus'
+        'AST': 'ast', 'TOV': 'tov', 'STL': 'stl', 'BLK': 'blk', '+/-': 'plusMinus',
+        
+        // Advanced columns
+        'Offensive Rating': 'offensiveRating',
+        'Defensive Rating': 'defensiveRating',
+        'Net Rating': 'netRating',
+        'Usage %': 'usagePercentage',
+        'True Shooting %': 'trueShootingPercentage',
+        'Effective FG%': 'effectiveFieldGoalPercentage',
+        'Assist %': 'assistPercentage',
+        'Assist Turnover Ratio': 'assistTurnoverRatio',
+        'Assist Ratio': 'assistRatio',
+        'Offensive Rebound %': 'offensiveReboundPercentage',
+        'Defensive Rebound %': 'defensiveReboundPercentage',
+        'Rebound %': 'reboundPercentage',
+        'Turnover %': 'turnoverPercentage',
+        'PIE': 'pie',
+        'Pace': 'pace'
       };
       return item[columnMap[column]] || '';
     };
@@ -614,6 +760,8 @@ const CustomReportsBuilder = () => {
             </button>
           </div>
         </div>
+
+        {renderViewTypeSelector()}
 
         <div className="overflow-x-auto">
           <table className="w-full">
