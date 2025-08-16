@@ -12,6 +12,7 @@ from typing import Dict
 from initialize_teams import TeamInitializer
 from initialize_active_players import PlayerInitializer
 from extract_nba_data import NBADataExtractor
+from extract_nba_advanced_stats import NBAAdvancedStatsExtractor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,6 +27,7 @@ class NBADataPipeline:
         self.team_initializer = TeamInitializer(db_config)
         self.player_initializer = PlayerInitializer(db_config)
         self.data_extractor = NBADataExtractor(db_config)
+        self.advanced_extractor = NBAAdvancedStatsExtractor(db_config)
     
     def clear_all_data(self):
         """Clear all data from database in correct order"""
@@ -36,6 +38,12 @@ class NBADataPipeline:
             cursor = conn.cursor()
             
             # Delete in correct order to respect foreign keys
+            logger.info("  - Clearing player advanced stats...")
+            cursor.execute('DELETE FROM player_advanced_stats')
+            
+            logger.info("  - Clearing team advanced stats...")
+            cursor.execute('DELETE FROM team_advanced_stats')
+            
             logger.info("  - Clearing player game stats...")
             cursor.execute('DELETE FROM player_game_stats')
             
@@ -83,15 +91,55 @@ class NBADataPipeline:
         self.player_initializer.initialize_players(clear_existing=False)
         logger.info("🎉 Complete setup finished!")
     
-    def load_date(self, target_date: date):
-        """Load games for a specific date"""
+    def load_date(self, target_date: date, load_advanced: bool = True):
+        """Load games and stats for a specific date"""
         logger.info(f"📅 Loading games for {target_date}")
+        
+        # First load traditional stats (games, players, teams)
+        logger.info("📊 Loading traditional stats...")
         self.data_extractor.extract_games_for_date(target_date)
+        
+        # Then load advanced stats if requested
+        if load_advanced:
+            logger.info("📈 Loading advanced stats...")
+            try:
+                self.advanced_extractor.extract_advanced_stats_for_date(target_date)
+                logger.info(f"🎉 Successfully loaded both traditional and advanced stats for {target_date}")
+            except Exception as e:
+                logger.error(f"❌ Failed to load advanced stats for {target_date}: {e}")
+                logger.info("✅ Traditional stats were loaded successfully")
+        else:
+            logger.info(f"✅ Successfully loaded traditional stats for {target_date}")
     
-    def load_date_range(self, start_date: date, end_date: date):
-        """Load games for a date range"""
+    def load_date_range(self, start_date: date, end_date: date, load_advanced: bool = True):
+        """Load games and stats for a date range"""
         logger.info(f"📅 Loading games from {start_date} to {end_date}")
+        
+        # First load traditional stats for the entire range
+        logger.info("📊 Loading traditional stats for date range...")
         self.data_extractor.extract_games_for_date_range(start_date, end_date)
+        
+        # Then load advanced stats if requested
+        if load_advanced:
+            logger.info("📈 Loading advanced stats for date range...")
+            try:
+                self.advanced_extractor.extract_advanced_stats_for_date_range(start_date, end_date)
+                logger.info(f"🎉 Successfully loaded both traditional and advanced stats for {start_date} to {end_date}")
+            except Exception as e:
+                logger.error(f"❌ Failed to load advanced stats for date range: {e}")
+                logger.info("✅ Traditional stats were loaded successfully")
+        else:
+            logger.info(f"✅ Successfully loaded traditional stats for {start_date} to {end_date}")
+    
+    def load_advanced_only_date(self, target_date: date):
+        """Load only advanced stats for a specific date (assumes traditional stats already exist)"""
+        logger.info(f"📈 Loading advanced stats only for {target_date}")
+        self.advanced_extractor.extract_advanced_stats_for_date(target_date)
+    
+    def load_advanced_only_date_range(self, start_date: date, end_date: date):
+        """Load only advanced stats for a date range (assumes traditional stats already exist)"""
+        logger.info(f"📈 Loading advanced stats only from {start_date} to {end_date}")
+        self.advanced_extractor.extract_advanced_stats_for_date_range(start_date, end_date)
 
 def get_db_config() -> Dict[str, str]:
     """Get database configuration"""
@@ -124,14 +172,24 @@ Setup Commands:
   python nba_pipeline.py setup-teams     # Initialize NBA teams only (clears all data first)
   python nba_pipeline.py setup-players   # Initialize active players only  
 
-Load Commands:
-  python nba_pipeline.py load 2025-01-15                    # Load games for specific date
-  python nba_pipeline.py load 2025-01-15 to 2025-01-22     # Load games for date range
+Load Commands (Traditional + Advanced Stats):
+  python nba_pipeline.py load 2025-01-15                    # Load all stats for specific date
+  python nba_pipeline.py load 2025-01-15 to 2025-01-22     # Load all stats for date range
+
+Load Commands (Traditional Stats Only):
+  python nba_pipeline.py load-basic 2025-01-15                    # Load traditional stats only
+  python nba_pipeline.py load-basic 2025-01-15 to 2025-01-22     # Load traditional stats only
+
+Load Commands (Advanced Stats Only):
+  python nba_pipeline.py load-advanced 2025-01-15                    # Load advanced stats only
+  python nba_pipeline.py load-advanced 2025-01-15 to 2025-01-22     # Load advanced stats only
 
 Examples:
   python nba_pipeline.py setup                              # Full setup
-  python nba_pipeline.py load 2025-01-19                    # Load one day
-  python nba_pipeline.py load 2025-01-15 to 2025-01-22     # Load date range
+  python nba_pipeline.py load 2025-01-19                    # Load all stats for one day
+  python nba_pipeline.py load 2025-01-15 to 2025-01-22     # Load all stats for date range
+  python nba_pipeline.py load-basic 2025-01-19             # Load only traditional stats
+  python nba_pipeline.py load-advanced 2025-01-19          # Load only advanced stats
     """)
 
 def main():
@@ -163,13 +221,18 @@ def main():
             # Setup players only
             pipeline.setup_players()
             
-        elif command == "load":
+        elif command in ["load", "load-basic", "load-advanced"]:
+            # Determine what to load
+            load_traditional = command in ["load", "load-basic"]
+            load_advanced_stats = command in ["load", "load-advanced"]
+            advanced_only = command == "load-advanced"
+            
             # Load games
             if len(sys.argv) < 3:
-                print("❌ Please provide a date or date range")
+                print("Please provide a date or date range")
                 print("Examples:")
-                print("  python nba_pipeline.py load 2025-01-15")
-                print("  python nba_pipeline.py load 2025-01-15 to 2025-01-22")
+                print(f"  python nba_pipeline.py {command} 2025-01-15")
+                print(f"  python nba_pipeline.py {command} 2025-01-15 to 2025-01-22")
                 sys.exit(1)
             
             # Check if it's a date range
@@ -183,13 +246,16 @@ def main():
                     end_date = parse_date(end_date_str)
                     
                     if start_date > end_date:
-                        print("❌ Start date must be before or equal to end date")
+                        print("Start date must be before or equal to end date")
                         sys.exit(1)
                     
-                    pipeline.load_date_range(start_date, end_date)
+                    if advanced_only:
+                        pipeline.load_advanced_only_date_range(start_date, end_date)
+                    elif load_traditional:
+                        pipeline.load_date_range(start_date, end_date, load_advanced=load_advanced_stats)
                     
                 except ValueError as e:
-                    print(f"❌ {e}")
+                    print(f"Error: {e}")
                     sys.exit(1)
             
             else:
@@ -198,14 +264,18 @@ def main():
                 
                 try:
                     target_date = parse_date(date_str)
-                    pipeline.load_date(target_date)
+                    
+                    if advanced_only:
+                        pipeline.load_advanced_only_date(target_date)
+                    elif load_traditional:
+                        pipeline.load_date(target_date, load_advanced=load_advanced_stats)
                     
                 except ValueError as e:
-                    print(f"❌ {e}")
+                    print(f"Error: {e}")
                     sys.exit(1)
         
         else:
-            print(f"❌ Unknown command: {command}")
+            print(f"Unknown command: {command}")
             print_usage()
             sys.exit(1)
     

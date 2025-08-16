@@ -7,7 +7,7 @@ const { query } = require('../config/database');
  * Reads and executes SQL migration files with better error handling
  */
 const runMigration = async (filename) => {
-  console.log(`🔄 Running migration: ${filename}`);
+  console.log(`📄 Running migration: ${filename}`);
   
   try {
     const migrationPath = path.join(__dirname, '../../migrations', filename);
@@ -100,6 +100,241 @@ const checkExistingSchema = async () => {
 };
 
 /**
+ * Verify all expected tables exist
+ */
+const verifyTablesCreated = async () => {
+  console.log('🔍 Verifying all tables were created...');
+  
+  const expectedTables = [
+    'teams',
+    'players', 
+    'games',
+    'player_game_stats',
+    'player_advanced_stats',
+    'team_game_stats',
+    'team_advanced_stats'
+  ];
+  
+  try {
+    const result = await query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `);
+    
+    const actualTables = result.rows.map(row => row.table_name);
+    const missingTables = expectedTables.filter(table => !actualTables.includes(table));
+    
+    if (missingTables.length > 0) {
+      throw new Error(`Missing tables: ${missingTables.join(', ')}`);
+    }
+    
+    console.log(`✅ All ${expectedTables.length} expected tables found`);
+    return actualTables;
+    
+  } catch (error) {
+    console.error(`❌ Table verification failed: ${error.message}`);
+    throw error;
+  }
+};
+
+/**
+ * Verify all expected views exist
+ */
+const verifyViewsCreated = async () => {
+  console.log('🔍 Verifying all views were created...');
+  
+  const expectedViews = [
+    'player_season_averages',
+    'player_advanced_season_averages',
+    'team_season_totals',
+    'team_advanced_season_totals'
+  ];
+  
+  try {
+    const result = await query(`
+      SELECT table_name as view_name
+      FROM information_schema.views 
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `);
+    
+    const actualViews = result.rows.map(row => row.view_name);
+    const missingViews = expectedViews.filter(view => !actualViews.includes(view));
+    
+    if (missingViews.length > 0) {
+      throw new Error(`Missing views: ${missingViews.join(', ')}`);
+    }
+    
+    console.log(`✅ All ${expectedViews.length} expected views found`);
+    return actualViews;
+    
+  } catch (error) {
+    console.error(`❌ View verification failed: ${error.message}`);
+    throw error;
+  }
+};
+
+/**
+ * Verify indexes were created for all tables
+ */
+const verifyIndexesCreated = async () => {
+  console.log('🔍 Verifying indexes were created...');
+  
+  try {
+    const result = await query(`
+      SELECT 
+        schemaname,
+        tablename,
+        COUNT(*) as index_count
+      FROM pg_indexes 
+      WHERE schemaname = 'public'
+      GROUP BY schemaname, tablename
+      ORDER BY tablename
+    `);
+    
+    const indexCounts = {};
+    result.rows.forEach(row => {
+      indexCounts[row.tablename] = parseInt(row.index_count);
+    });
+    
+    // Expected minimum index counts (including primary key indexes)
+    const expectedMinIndexes = {
+      'teams': 3,
+      'players': 5,
+      'games': 6,
+      'player_game_stats': 10,
+      'player_advanced_stats': 10,
+      'team_game_stats': 8,
+      'team_advanced_stats': 8
+    };
+    
+    const issues = [];
+    Object.entries(expectedMinIndexes).forEach(([table, minCount]) => {
+      const actualCount = indexCounts[table] || 0;
+      if (actualCount < minCount) {
+        issues.push(`${table}: expected at least ${minCount} indexes, found ${actualCount}`);
+      }
+    });
+    
+    if (issues.length > 0) {
+      throw new Error(`Index verification issues: ${issues.join(', ')}`);
+    }
+    
+    console.log('✅ All tables have adequate indexes');
+    
+    // Log index summary
+    Object.entries(indexCounts).forEach(([table, count]) => {
+      console.log(`   ${table}: ${count} indexes`);
+    });
+    
+    return indexCounts;
+    
+  } catch (error) {
+    console.error(`❌ Index verification failed: ${error.message}`);
+    throw error;
+  }
+};
+
+/**
+ * Verify foreign key constraints exist
+ */
+const verifyForeignKeys = async () => {
+  console.log('🔍 Verifying foreign key constraints...');
+  
+  try {
+    const result = await query(`
+      SELECT 
+        tc.table_name,
+        tc.constraint_name,
+        kcu.column_name,
+        ccu.table_name AS foreign_table_name,
+        ccu.column_name AS foreign_column_name
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+        AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+      ORDER BY tc.table_name, tc.constraint_name
+    `);
+    
+    const foreignKeys = result.rows;
+    
+    // Expected foreign key count
+    const expectedFKCount = 12; // 2 players, 2 games, 3 player_game_stats, 3 player_advanced_stats, 2 team_game_stats, 2 team_advanced_stats
+    
+    if (foreignKeys.length < expectedFKCount) {
+      throw new Error(`Expected at least ${expectedFKCount} foreign keys, found ${foreignKeys.length}`);
+    }
+    
+    console.log(`✅ Found ${foreignKeys.length} foreign key constraints`);
+    
+    // Log foreign key summary
+    const fksByTable = {};
+    foreignKeys.forEach(fk => {
+      if (!fksByTable[fk.table_name]) {
+        fksByTable[fk.table_name] = [];
+      }
+      fksByTable[fk.table_name].push(`${fk.column_name} -> ${fk.foreign_table_name}.${fk.foreign_column_name}`);
+    });
+    
+    Object.entries(fksByTable).forEach(([table, fks]) => {
+      console.log(`   ${table}: ${fks.join(', ')}`);
+    });
+    
+    return foreignKeys;
+    
+  } catch (error) {
+    console.error(`❌ Foreign key verification failed: ${error.message}`);
+    throw error;
+  }
+};
+
+/**
+ * Test sample queries on the new schema
+ */
+const testSampleQueries = async () => {
+  console.log('🔍 Testing sample queries...');
+  
+  try {
+    // Test basic table access
+    await query('SELECT COUNT(*) FROM teams');
+    await query('SELECT COUNT(*) FROM players');
+    await query('SELECT COUNT(*) FROM games');
+    await query('SELECT COUNT(*) FROM player_game_stats');
+    await query('SELECT COUNT(*) FROM player_advanced_stats');
+    await query('SELECT COUNT(*) FROM team_game_stats');
+    await query('SELECT COUNT(*) FROM team_advanced_stats');
+    
+    // Test view access
+    await query('SELECT COUNT(*) FROM player_season_averages');
+    await query('SELECT COUNT(*) FROM player_advanced_season_averages');
+    await query('SELECT COUNT(*) FROM team_season_totals');
+    await query('SELECT COUNT(*) FROM team_advanced_season_totals');
+    
+    // Test a complex join query
+    await query(`
+      SELECT COUNT(*) 
+      FROM players p 
+      JOIN teams t ON p.team_id = t.id 
+      WHERE p.position IS NOT NULL
+    `);
+    
+    console.log('✅ All sample queries executed successfully');
+    
+  } catch (error) {
+    console.error(`❌ Sample query test failed: ${error.message}`);
+    throw error;
+  }
+};
+
+/**
  * Setup the complete database schema
  */
 const setupDatabase = async (force = false) => {
@@ -130,18 +365,20 @@ const setupDatabase = async (force = false) => {
     await runMigration('001_create_tables.sql');
     await runMigration('002_create_indexes.sql');
     
-    // Verify setup
-    console.log('🔍 Verifying setup...');
-    const finalTables = await checkExistingSchema();
-    const expectedTables = ['teams', 'players', 'games', 'player_game_stats', 'team_game_stats'];
-    
-    const missingTables = expectedTables.filter(table => !finalTables.includes(table));
-    if (missingTables.length > 0) {
-      throw new Error(`Missing tables after setup: ${missingTables.join(', ')}`);
-    }
+    // Comprehensive verification
+    console.log('🔍 Running comprehensive verification...');
+    await verifyTablesCreated();
+    await verifyViewsCreated();
+    await verifyIndexesCreated();
+    await verifyForeignKeys();
+    await testSampleQueries();
     
     console.log('🎉 Database setup completed successfully!');
-    console.log(`📊 Created ${finalTables.length} tables`);
+    console.log('📊 Schema includes:');
+    console.log('   - 7 tables (teams, players, games, player_game_stats, player_advanced_stats, team_game_stats, team_advanced_stats)');
+    console.log('   - 4 views (traditional and advanced season averages)');
+    console.log('   - Comprehensive indexes for performance');
+    console.log('   - Foreign key constraints for data integrity');
     console.log('📊 Ready to load data with: npm run seed');
     
     return true;
@@ -163,13 +400,17 @@ const cleanDatabase = async () => {
     // Drop views first
     await query(`
       DROP VIEW IF EXISTS player_season_averages CASCADE;
+      DROP VIEW IF EXISTS player_advanced_season_averages CASCADE;
       DROP VIEW IF EXISTS team_season_totals CASCADE;
+      DROP VIEW IF EXISTS team_advanced_season_totals CASCADE;
     `);
     
     // Drop tables in reverse order of dependencies
     const dropOrder = [
       'player_game_stats',
+      'player_advanced_stats',
       'team_game_stats', 
+      'team_advanced_stats',
       'players',
       'games',
       'teams'
@@ -188,11 +429,88 @@ const cleanDatabase = async () => {
   }
 };
 
+/**
+ * Get database status and statistics
+ */
+const getDatabaseStatus = async () => {
+  console.log('📊 Gathering database status...');
+  
+  try {
+    // Table counts
+    const tables = await query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `);
+    
+    // View counts
+    const views = await query(`
+      SELECT table_name as view_name
+      FROM information_schema.views 
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `);
+    
+    // Index counts
+    const indexes = await query(`
+      SELECT COUNT(*) as total_indexes
+      FROM pg_indexes 
+      WHERE schemaname = 'public'
+    `);
+    
+    // Foreign key counts
+    const foreignKeys = await query(`
+      SELECT COUNT(*) as total_fks
+      FROM information_schema.table_constraints 
+      WHERE constraint_type = 'FOREIGN KEY' AND table_schema = 'public'
+    `);
+    
+    // Data counts (if tables exist and have data)
+    let dataCounts = {};
+    const tableNames = tables.rows.map(r => r.table_name);
+    
+    for (const table of tableNames) {
+      try {
+        const result = await query(`SELECT COUNT(*) as count FROM ${table}`);
+        dataCounts[table] = parseInt(result.rows[0].count);
+      } catch (error) {
+        dataCounts[table] = 'error';
+      }
+    }
+    
+    const status = {
+      tables: tables.rows.length,
+      views: views.rows.length,
+      indexes: parseInt(indexes.rows[0].total_indexes),
+      foreignKeys: parseInt(foreignKeys.rows[0].total_fks),
+      dataCounts
+    };
+    
+    console.log('Database Status:');
+    console.log(`   Tables: ${status.tables}`);
+    console.log(`   Views: ${status.views}`);
+    console.log(`   Indexes: ${status.indexes}`);
+    console.log(`   Foreign Keys: ${status.foreignKeys}`);
+    console.log('Data Counts:');
+    Object.entries(status.dataCounts).forEach(([table, count]) => {
+      console.log(`   ${table}: ${count}`);
+    });
+    
+    return status;
+    
+  } catch (error) {
+    console.error('❌ Failed to get database status:', error.message);
+    throw error;
+  }
+};
+
 // Handle command line arguments
 if (require.main === module) {
   const args = process.argv.slice(2);
   const force = args.includes('--force') || args.includes('-f');
   const clean = args.includes('--clean') || args.includes('-c');
+  const status = args.includes('--status') || args.includes('-s');
   
   if (clean) {
     cleanDatabase()
@@ -200,6 +518,10 @@ if (require.main === module) {
         console.log('🎯 Run setup again to recreate tables');
         process.exit(0);
       })
+      .catch(() => process.exit(1));
+  } else if (status) {
+    getDatabaseStatus()
+      .then(() => process.exit(0))
       .catch(() => process.exit(1));
   } else {
     setupDatabase(force)
@@ -213,5 +535,11 @@ module.exports = {
   runMigration, 
   testConnection, 
   checkExistingSchema,
-  cleanDatabase 
+  cleanDatabase,
+  verifyTablesCreated,
+  verifyViewsCreated, 
+  verifyIndexesCreated,
+  verifyForeignKeys,
+  testSampleQueries,
+  getDatabaseStatus
 };
