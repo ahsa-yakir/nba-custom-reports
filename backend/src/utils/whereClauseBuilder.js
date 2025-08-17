@@ -1,7 +1,7 @@
 /**
  * Builds WHERE clauses from filter arrays - simplified version
  */
-const { getColumnName } = require('./columnMappings');
+const { getColumnName } = require('./metadata');
 
 const buildSingleCondition = (filter, measure, paramIndex, isAdvanced = false) => {
   const columnName = getColumnName(filter.type, measure, isAdvanced);
