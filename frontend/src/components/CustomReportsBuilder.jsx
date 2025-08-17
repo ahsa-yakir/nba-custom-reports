@@ -170,7 +170,7 @@ const CustomReportsBuilder = () => {
           values: filter.values
         })),
         sortConfig: reportState.sortConfig.column ? reportState.sortConfig : null,
-        viewType: 'unified' // Always request unified data
+        viewType: 'unified' // Always request unified data /
       };
 
       const response = await apiService.generateReport(reportConfig);

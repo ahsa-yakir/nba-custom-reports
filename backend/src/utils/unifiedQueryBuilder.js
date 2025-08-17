@@ -174,14 +174,14 @@ const buildUnifiedQuery = (measure, filters, sortConfig, limit = 100) => {
   // Get base unified query
   let baseQuery = measure === 'Players' ? getPlayerUnifiedQuery() : getTeamUnifiedQuery();
   
-  // Add WHERE clause for filters - use unified mode (includes both traditional and advanced column mappings)
-  const { whereClause, params } = buildWhereClause(filters, measure, true);
+  // Add WHERE clause for filters using the simplified approach
+  const { whereClause, params } = buildWhereClause(filters, measure, false);
   baseQuery += ` ${whereClause}`;
   
   // Add GROUP BY clause
   baseQuery += getUnifiedGroupByClause(measure);
   
-  // Normalize and add ORDER BY clause - use unified mode
+  // Normalize and add ORDER BY clause
   const normalizedSort = normalizeSortConfig(sortConfig, measure, true);
   const orderByClause = buildOrderByClause(normalizedSort, measure, true);
   baseQuery += ` ${orderByClause}`;
