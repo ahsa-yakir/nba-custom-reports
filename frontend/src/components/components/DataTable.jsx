@@ -1,50 +1,174 @@
 import React from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
-import { formatTableValue, getValueForColumn } from '../utils/dataFormatting';
+import { ChevronUp, ChevronDown, Minus, Info } from 'lucide-react';
+import { getValueForColumn, formatTableValue } from '../utils/dataFormatting';
+import { getColumnKey, getColumnTooltip } from '../utils/columnManager';
 
-const DataTable = ({ data, columns, sortConfig, onSort }) => {
+const DataTable = ({ 
+  data, 
+  columns, 
+  columnMetadata, 
+  sortConfig, 
+  viewType, 
+  measure, 
+  onSort, 
+  isLoading 
+}) => {
+  if (isLoading) {
+    return (
+      <div className="animate-pulse">
+        <div className="h-8 bg-gray-200 rounded mb-4"></div>
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="h-12 bg-gray-100 rounded mb-2"></div>
+        ))}
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <div className="text-lg font-medium mb-2">No data available</div>
+        <div className="text-sm">Try adjusting your filters or generating a new report.</div>
+      </div>
+    );
+  }
+
   const getSortIcon = (column) => {
     if (sortConfig.column !== column) {
-      return <div className="w-4 h-4"></div>;
+      return <Minus className="w-4 h-4 text-gray-300" />;
     }
-    return sortConfig.direction === 'asc' ? 
-      <ChevronUp className="w-4 h-4 text-blue-600" /> : 
-      <ChevronDown className="w-4 h-4 text-blue-600" />;
+    return sortConfig.direction === 'asc' 
+      ? <ChevronUp className="w-4 h-4 text-blue-500" />
+      : <ChevronDown className="w-4 h-4 text-blue-500" />;
+  };
+
+  const getCellClassName = (column, value) => {
+    let baseClass = "px-4 py-3 text-sm";
+    
+    // Add fixed width classes based on column type
+    if (['Name'].includes(column)) {
+      baseClass += " text-left font-medium w-48 min-w-48 max-w-48";
+    } else if (['Team', 'TEAM'].includes(column)) {
+      baseClass += " text-left font-medium w-16 min-w-16 max-w-16";
+    } else if (['AGE', 'Age'].includes(column)) {
+      baseClass += " text-right w-16 min-w-16 max-w-16";
+    } else if (['Games Played'].includes(column)) {
+      baseClass += " text-right w-20 min-w-20 max-w-20";
+    } else if (column.includes('%') || column.includes('Rating')) {
+      baseClass += " text-right w-24 min-w-24 max-w-24";
+    } else {
+      baseClass += " text-right w-20 min-w-20 max-w-20";
+    }
+
+    // Highlight null/missing advanced stats
+    if (viewType === 'advanced' && (value === null || value === undefined)) {
+      baseClass += " text-gray-400";
+    }
+
+    return baseClass;
+  };
+
+  const renderCellValue = (item, column) => {
+    const value = getValueForColumn(item, column);
+    
+    if (value === null || value === undefined) {
+      return <span className="text-gray-400">-</span>;
+    }
+
+    const columnMeta = columnMetadata.find(m => m.key === column);
+    return formatTableValue(value, column, columnMeta?.format);
   };
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b">
-            {columns.map(column => (
-              <th 
-                key={column} 
-                className={`text-left py-3 px-4 font-semibold text-gray-700 cursor-pointer hover:bg-gray-50 select-none ${
-                  sortConfig.column === column ? 'bg-blue-50 text-blue-700' : ''
-                }`}
-                onClick={() => onSort(column)}
-              >
-                <div className="flex items-center space-x-1">
-                  <span>{column}</span>
-                  {getSortIcon(column)}
-                </div>
-              </th>
-            ))}
+      <table className="divide-y divide-gray-200" style={{ width: 'auto', minWidth: 'min-content' }}>
+        <thead className="bg-gray-50">
+          <tr>
+            {columns.map((column) => {
+              const columnMeta = columnMetadata.find(m => m.key === column);
+              const tooltip = getColumnTooltip(column);
+              
+              // Get consistent width classes for headers
+              let headerClass = "px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100";
+              
+              if (['Name'].includes(column)) {
+                headerClass += " text-left w-48 min-w-48 max-w-48";
+              } else if (['Team', 'TEAM'].includes(column)) {
+                headerClass += " text-left w-16 min-w-16 max-w-16";
+              } else if (['AGE', 'Age'].includes(column)) {
+                headerClass += " text-right w-16 min-w-16 max-w-16";
+              } else if (['Games Played'].includes(column)) {
+                headerClass += " text-right w-20 min-w-20 max-w-20";
+              } else if (column.includes('%') || column.includes('Rating')) {
+                headerClass += " text-right w-24 min-w-24 max-w-24";
+              } else {
+                headerClass += " text-right w-20 min-w-20 max-w-20";
+              }
+              
+              return (
+                <th
+                  key={column}
+                  className={headerClass}
+                  onClick={() => onSort(column)}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>{column}</span>
+                    {tooltip && (
+                      <div className="group relative">
+                        <Info className="w-3 h-3 text-gray-400" />
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
+                          {tooltip}
+                        </div>
+                      </div>
+                    )}
+                    {getSortIcon(column)}
+                  </div>
+                </th>
+              );
+            })}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="bg-white divide-y divide-gray-200">
           {data.map((item, index) => (
-            <tr key={index} className="border-b hover:bg-gray-50">
-              {columns.map(column => (
-                <td key={column} className="py-3 px-4">
-                  {formatTableValue(getValueForColumn(item, column), column)}
+            <tr 
+              key={index} 
+              className={`hover:bg-gray-50 ${
+                item._has_advanced_data === false && viewType === 'advanced' 
+                  ? 'bg-yellow-50' 
+                  : ''
+              }`}
+            >
+              {columns.map((column) => (
+                <td
+                  key={column}
+                  className={getCellClassName(column, getValueForColumn(item, column))}
+                >
+                  {renderCellValue(item, column)}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+      
+      {/* Table footer with metadata */}
+      <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+        <div>
+          Showing {data.length} {measure.toLowerCase()}
+          {viewType === 'custom' && ` with ${columns.length} selected columns`}
+        </div>
+        <div className="flex items-center space-x-4">
+          {viewType === 'advanced' && (
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 bg-yellow-100 border border-yellow-300 rounded"></div>
+              <span>Limited advanced data</span>
+            </div>
+          )}
+          <div>
+            Sort: {sortConfig.column || 'Default'} {sortConfig.direction === 'asc' ? '↑' : '↓'}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

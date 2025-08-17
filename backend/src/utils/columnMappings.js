@@ -1,8 +1,8 @@
 /**
- * Maps frontend column names to database column names
+ * Enhanced column mappings supporting unified queries with both traditional and advanced stats
  */
 
-const getPlayerColumnMapping = (isAdvanced = false) => {
+const getPlayerColumnMapping = (isAdvanced = false, isUnified = false) => {
   const traditionalColumns = {
     'Team': 't.team_code',
     'Age': 'p.age',
@@ -46,10 +46,15 @@ const getPlayerColumnMapping = (isAdvanced = false) => {
     'Pace': 'pas.pace'
   };
 
+  if (isUnified) {
+    // For unified queries, return both traditional and advanced columns
+    return { ...traditionalColumns, ...advancedColumns };
+  }
+
   return isAdvanced ? { ...traditionalColumns, ...advancedColumns } : traditionalColumns;
 };
 
-const getTeamColumnMapping = (isAdvanced = false) => {
+const getTeamColumnMapping = (isAdvanced = false, isUnified = false) => {
   const traditionalColumns = {
     'Points': 'tgs.points',
     'Wins': 'CASE WHEN tgs.win = TRUE THEN 1 ELSE 0 END',
@@ -57,6 +62,8 @@ const getTeamColumnMapping = (isAdvanced = false) => {
     'FGA': 'tgs.field_goals_attempted',
     'FG%': 'tgs.field_goal_percentage',
     '3PM': 'tgs.three_pointers_made',
+    '3PA': 'tgs.three_pointers_attempted',
+    '3P%': 'tgs.three_point_percentage',
     'FTM': 'tgs.free_throws_made',
     'FTA': 'tgs.free_throws_attempted',
     'FT%': 'tgs.free_throw_percentage',
@@ -86,18 +93,23 @@ const getTeamColumnMapping = (isAdvanced = false) => {
     'Pace': 'tas.pace'
   };
 
+  if (isUnified) {
+    // For unified queries, return both traditional and advanced columns
+    return { ...traditionalColumns, ...advancedColumns };
+  }
+
   return isAdvanced ? { ...traditionalColumns, ...advancedColumns } : traditionalColumns;
 };
 
-const getColumnName = (filterType, measure, isAdvanced) => {
+const getColumnName = (filterType, measure, isAdvanced, isUnified = false) => {
   if (measure === 'Players') {
-    return getPlayerColumnMapping(isAdvanced)[filterType];
+    return getPlayerColumnMapping(isAdvanced, isUnified)[filterType];
   } else {
-    return getTeamColumnMapping(isAdvanced)[filterType];
+    return getTeamColumnMapping(isAdvanced, isUnified)[filterType];
   }
 };
 
-const getSortColumnMapping = (measure, isAdvanced = false) => {
+const getSortColumnMapping = (measure, isAdvanced = false, isUnified = false) => {
   const commonColumns = {
     'MINS': 'mins',
     'PTS': 'pts',
@@ -142,28 +154,129 @@ const getSortColumnMapping = (measure, isAdvanced = false) => {
   if (measure === 'Players') {
     const playerColumns = {
       ...commonColumns,
-      ...(isAdvanced ? advancedColumns : {}),
       'Name': 'p.name',
       'TEAM': 't.team_code',
-      'AGE': 'p.age'
+      'Team': 't.team_code',
+      'AGE': 'p.age',
+      'Age': 'p.age'
     };
+
+    if (isAdvanced || isUnified) {
+      return { ...playerColumns, ...advancedColumns };
+    }
     return playerColumns;
   } else {
     const teamColumns = {
       ...commonColumns,
-      ...(isAdvanced ? advancedColumns : {}),
       'Team': 't.team_code',
       'Wins': 'wins',
       'Losses': 'losses',
-      'Win %': 'win_pct'
+      'Win %': 'win_pct',
+      'Points': 'pts'
     };
+
+    if (isAdvanced || isUnified) {
+      return { ...teamColumns, ...advancedColumns };
+    }
     return teamColumns;
   }
+};
+
+const getUnifiedColumnMapping = (measure) => {
+  // Return all available columns for unified queries
+  return getSortColumnMapping(measure, false, true);
+};
+
+const getCustomViewColumns = (filters, measure) => {
+  // Base columns that are always included
+  const baseColumns = measure === 'Players' 
+    ? ['Name', 'TEAM', 'AGE', 'Games Played']
+    : ['Team', 'Games Played'];
+  
+  // Extract unique filter types as additional columns
+  const filterColumns = [...new Set(filters.map(f => f.type))];
+  
+  // Combine and deduplicate
+  const allColumns = [...baseColumns];
+  filterColumns.forEach(col => {
+    // Map some filter types to their display names
+    const columnMapping = {
+      'Team': 'TEAM',
+      'Age': 'AGE',
+      'Points': 'PTS'
+    };
+    
+    const displayColumn = columnMapping[col] || col;
+    if (!allColumns.includes(displayColumn)) {
+      allColumns.push(displayColumn);
+    }
+  });
+  
+  return allColumns;
+};
+
+const getTraditionalColumns = (measure) => {
+  if (measure === 'Players') {
+    return [
+      'Name', 'TEAM', 'AGE', 'Games Played', 'MINS', 'PTS', 'FGM', 'FGA', 'FG%', 
+      '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB', 
+      'AST', 'TOV', 'STL', 'BLK', 'PF', '+/-'
+    ];
+  } else {
+    return [
+      'Team', 'Games Played', 'Wins', 'Losses', 'Win %', 'PTS', 'FGM', 'FGA', 'FG%', 
+      '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB', 
+      'AST', 'TOV', 'STL', 'BLK', '+/-'
+    ];
+  }
+};
+
+const getAdvancedColumns = (measure) => {
+  if (measure === 'Players') {
+    return [
+      'Name', 'TEAM', 'AGE', 'Games Played', 'Offensive Rating', 'Defensive Rating', 
+      'Net Rating', 'Usage %', 'True Shooting %', 'Effective FG%', 'Assist %', 
+      'Assist Turnover Ratio', 'Assist Ratio', 'Offensive Rebound %', 
+      'Defensive Rebound %', 'Rebound %', 'Turnover %', 'PIE', 'Pace'
+    ];
+  } else {
+    return [
+      'Team', 'Games Played', 'Offensive Rating', 'Defensive Rating', 'Net Rating', 
+      'True Shooting %', 'Effective FG%', 'Assist %', 'Assist Turnover Ratio', 
+      'Offensive Rebound %', 'Defensive Rebound %', 'Rebound %', 'Turnover %', 
+      'PIE', 'Pace'
+    ];
+  }
+};
+
+const isTraditionalColumn = (columnName) => {
+  const traditionalTypes = [
+    'Team', 'Age', 'Games Played', 'MINS', 'PTS', 'FGM', 'FGA', 'FG%',
+    '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB',
+    'AST', 'TOV', 'STL', 'BLK', 'PF', '+/-', 'Wins', 'Losses', 'Win %', 'Points'
+  ];
+  return traditionalTypes.includes(columnName);
+};
+
+const isAdvancedColumn = (columnName) => {
+  const advancedTypes = [
+    'Offensive Rating', 'Defensive Rating', 'Net Rating', 'Usage %',
+    'True Shooting %', 'Effective FG%', 'Assist %', 'Assist Turnover Ratio',
+    'Assist Ratio', 'Offensive Rebound %', 'Defensive Rebound %', 'Rebound %',
+    'Turnover %', 'PIE', 'Pace'
+  ];
+  return advancedTypes.includes(columnName);
 };
 
 module.exports = {
   getColumnName,
   getPlayerColumnMapping,
   getTeamColumnMapping,
-  getSortColumnMapping
+  getSortColumnMapping,
+  getUnifiedColumnMapping,
+  getCustomViewColumns,
+  getTraditionalColumns,
+  getAdvancedColumns,
+  isTraditionalColumn,
+  isAdvancedColumn
 };

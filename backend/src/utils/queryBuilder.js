@@ -1,20 +1,26 @@
 /**
- * Main query builder - orchestrates all the pieces
+ * Enhanced query builder supporting unified queries and backward compatibility
  */
 const { buildWhereClause } = require('./whereClauseBuilder');
 const { buildOrderByClause, normalizeSortConfig } = require('./sortingUtils');
 const { getBaseQuery, getGroupByClause } = require('./queryTemplates');
 const { hasAdvancedFilters, validateFilters } = require('./filterValidation');
+const { 
+  buildUnifiedQuery, 
+  executeQuery: unifiedExecuteQuery,
+  analyzeFilterTypes,
+  getRecommendedViewType,
+  getActiveColumns
+} = require('./unifiedQueryBuilder');
 
 // Test if database module loads properly
 let query;
 try {
   const db = require('../config/database');
   query = db.query;
-  console.log('✅ Database connection loaded');
+  console.log('✅ Database connection loaded in queryBuilder');
 } catch (error) {
-  console.error('❌ Database connection failed:', error.message);
-  // Create a dummy query function for now
+  console.error('❌ Database connection failed in queryBuilder:', error.message);
   query = async () => {
     throw new Error('Database not connected');
   };
@@ -48,11 +54,33 @@ const buildReportQuery = (measure, filters, sortConfig, limit = 100, viewType = 
     throw new Error('Filters must be an array');
   }
   
+  // Analyze filters to determine best approach
+  const filterAnalysis = analyzeFilterTypes(filters);
+  const recommendedViewType = getRecommendedViewType(filters);
+  
+  console.log(`🔧 Building ${measure} query`);
+  console.log(`📊 Filter analysis:`, filterAnalysis);
+  console.log(`💡 Recommended view: ${recommendedViewType}`);
+  
+  // Use unified query for mixed filters or when explicitly requested
+  if (filterAnalysis.isMixed || viewType === 'unified') {
+    console.log('🔄 Using unified query approach');
+    const result = buildUnifiedQuery(measure, filters, sortConfig, limit);
+    return {
+      ...result,
+      recommendedViewType,
+      filterAnalysis,
+      activeColumns: getActiveColumns(filters, measure)
+    };
+  }
+  
+  // Fall back to legacy approach for pure traditional or advanced queries
+  console.log(`🔧 Using legacy ${viewType} approach`);
+  
   // Determine if we should use advanced stats based on filters or viewType
   const isAdvanced = viewType === 'advanced' || hasAdvancedFilters(filters);
   
-  console.log(`📊 Building ${measure} query (${isAdvanced ? 'Advanced' : 'Traditional'} view)`);
-  console.log(`🔧 Filters: ${filters.length}, Limit: ${limit}`);
+  console.log(`📊 Filters: ${filters.length}, Limit: ${limit}, Advanced: ${isAdvanced}`);
   
   // Base SELECT and FROM clauses
   let baseQuery = getBaseQuery(measure, isAdvanced);
@@ -78,12 +106,36 @@ const buildReportQuery = (measure, filters, sortConfig, limit = 100, viewType = 
     sql: baseQuery, 
     params, 
     isAdvanced,
-    normalizedSort
+    normalizedSort,
+    recommendedViewType,
+    filterAnalysis,
+    isUnified: false
   };
 };
 
 const buildCountQuery = (measure, filters, viewType = 'traditional') => {
   // Build a count query to get total results without limit
+  const filterAnalysis = analyzeFilterTypes(filters);
+  
+  // Use unified approach for mixed filters
+  if (filterAnalysis.isMixed || viewType === 'unified') {
+    // For unified queries, we need to adapt the count query
+    const { sql } = buildUnifiedQuery(measure, filters, null, null);
+    
+    // Extract the main query part and wrap it in a COUNT
+    const mainQuery = sql.replace(/SELECT[\s\S]*?FROM/, 'FROM')
+                         .replace(/ORDER BY[\s\S]*$/, '')
+                         .replace(/LIMIT[\s\S]*$/, '');
+    
+    const countQuery = measure === 'Players' 
+      ? `SELECT COUNT(DISTINCT p.id) as total_count ${mainQuery}`
+      : `SELECT COUNT(DISTINCT t.id) as total_count ${mainQuery}`;
+      
+    const { params } = buildWhereClause(filters, measure, false, true);
+    return { sql: countQuery, params };
+  }
+  
+  // Legacy count query approach
   const isAdvanced = viewType === 'advanced' || hasAdvancedFilters(filters);
   
   let countQuery;
@@ -143,14 +195,20 @@ const testQueryPerformance = async (measure, filters, sortConfig, viewType = 'tr
   const start = Date.now();
   
   try {
-    const { sql, params } = buildReportQuery(measure, filters, sortConfig, 10, viewType);
-    await executeQuery(sql, params);
+    const { sql, params, isUnified } = buildReportQuery(measure, filters, sortConfig, 10, viewType);
+    
+    if (isUnified) {
+      await unifiedExecuteQuery(sql, params);
+    } else {
+      await executeQuery(sql, params);
+    }
     
     const duration = Date.now() - start;
     return {
       success: true,
       duration,
-      message: `Query completed in ${duration}ms`
+      message: `Query completed in ${duration}ms`,
+      queryType: isUnified ? 'unified' : 'legacy'
     };
   } catch (error) {
     const duration = Date.now() - start;
@@ -162,14 +220,52 @@ const testQueryPerformance = async (measure, filters, sortConfig, viewType = 'tr
   }
 };
 
+const getQueryMetadata = (measure, filters, viewType = 'traditional') => {
+  // Analyze the query without executing it
+  try {
+    const filterAnalysis = analyzeFilterTypes(filters);
+    const recommendedViewType = getRecommendedViewType(filters);
+    const activeColumns = getActiveColumns(filters, measure);
+    
+    const { isUnified, isAdvanced } = buildReportQuery(measure, filters, null, 1, viewType);
+    
+    return {
+      success: true,
+      filterAnalysis,
+      recommendedViewType,
+      activeColumns,
+      queryType: isUnified ? 'unified' : 'legacy',
+      statsType: isAdvanced ? 'advanced' : 'traditional',
+      canUseUnified: filterAnalysis.isMixed || filterAnalysis.hasAdvanced,
+      suggestions: {
+        useUnified: filterAnalysis.isMixed,
+        switchToAdvanced: filterAnalysis.hasAdvanced && viewType === 'traditional',
+        switchToTraditional: !filterAnalysis.hasAdvanced && viewType === 'advanced'
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
 module.exports = {
   executeQuery,
   buildReportQuery,
   buildCountQuery,
   getSampleData,
   testQueryPerformance,
+  getQueryMetadata,
   
   // Re-export commonly used functions from other modules
   validateFilters,
-  hasAdvancedFilters
+  hasAdvancedFilters,
+  
+  // Re-export unified query functions
+  buildUnifiedQuery,
+  analyzeFilterTypes,
+  getRecommendedViewType,
+  getActiveColumns
 };

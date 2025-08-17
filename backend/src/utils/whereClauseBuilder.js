@@ -1,10 +1,10 @@
 /**
- * Builds WHERE clauses from filter arrays
+ * Enhanced WHERE clause builder supporting unified queries
  */
 const { getColumnName } = require('./columnMappings');
 
-const buildSingleCondition = (filter, measure, paramIndex, isAdvanced = false) => {
-  const columnName = getColumnName(filter.type, measure, isAdvanced);
+const buildSingleCondition = (filter, measure, paramIndex, isAdvanced = false, isUnified = false) => {
+  const columnName = getColumnName(filter.type, measure, isAdvanced, isUnified);
   if (!columnName) {
     console.warn(`Unknown filter type: ${filter.type} for measure: ${measure}`);
     return { condition: null, filterParams: [] };
@@ -54,7 +54,7 @@ const buildSingleCondition = (filter, measure, paramIndex, isAdvanced = false) =
   }
 };
 
-const buildWhereClause = (filters, measure, isAdvanced = false) => {
+const buildWhereClause = (filters, measure, isAdvanced = false, isUnified = false) => {
   if (!filters || filters.length === 0) {
     return { whereClause: '', params: [] };
   }
@@ -65,7 +65,7 @@ const buildWhereClause = (filters, measure, isAdvanced = false) => {
   
   filters.forEach(filter => {
     try {
-      const { condition, filterParams } = buildSingleCondition(filter, measure, paramIndex, isAdvanced);
+      const { condition, filterParams } = buildSingleCondition(filter, measure, paramIndex, isAdvanced, isUnified);
       if (condition) {
         conditions.push(condition);
         params.push(...filterParams);
@@ -81,7 +81,7 @@ const buildWhereClause = (filters, measure, isAdvanced = false) => {
   return { whereClause, params };
 };
 
-const buildHavingClause = (filters, measure, isAdvanced = false) => {
+const buildHavingClause = (filters, measure, isAdvanced = false, isUnified = false) => {
   // For aggregated columns that need HAVING instead of WHERE
   const havingFilters = filters.filter(filter => {
     const aggregatedTypes = [
@@ -91,7 +91,7 @@ const buildHavingClause = (filters, measure, isAdvanced = false) => {
       'Offensive Rating', 'Defensive Rating', 'Net Rating', 'Usage %',
       'True Shooting %', 'Effective FG%', 'Assist %', 'Assist Turnover Ratio',
       'Assist Ratio', 'Offensive Rebound %', 'Defensive Rebound %', 
-      'Rebound %', 'Turnover %', 'PIE', 'Pace'
+      'Rebound %', 'Turnover %', 'PIE', 'Pace', 'Wins', 'Losses', 'Win %', 'Points'
     ];
     return aggregatedTypes.includes(filter.type);
   });
@@ -105,7 +105,7 @@ const buildHavingClause = (filters, measure, isAdvanced = false) => {
   let paramIndex = 1;
   
   havingFilters.forEach(filter => {
-    const { condition, filterParams } = buildSingleCondition(filter, measure, paramIndex, isAdvanced);
+    const { condition, filterParams } = buildSingleCondition(filter, measure, paramIndex, isAdvanced, isUnified);
     if (condition) {
       conditions.push(condition);
       params.push(...filterParams);
@@ -118,7 +118,7 @@ const buildHavingClause = (filters, measure, isAdvanced = false) => {
   return { havingClause, params };
 };
 
-const combineWhereAndHaving = (filters, measure, isAdvanced = false) => {
+const combineWhereAndHaving = (filters, measure, isAdvanced = false, isUnified = false) => {
   // Separate filters into WHERE and HAVING categories
   const whereFilters = filters.filter(filter => {
     const nonAggregatedTypes = ['Team', 'Age'];
@@ -130,8 +130,8 @@ const combineWhereAndHaving = (filters, measure, isAdvanced = false) => {
     return !nonAggregatedTypes.includes(filter.type);
   });
   
-  const { whereClause, params: whereParams } = buildWhereClause(whereFilters, measure, isAdvanced);
-  const { havingClause, params: havingParams } = buildHavingClause(havingFilters, measure, isAdvanced);
+  const { whereClause, params: whereParams } = buildWhereClause(whereFilters, measure, isAdvanced, isUnified);
+  const { havingClause, params: havingParams } = buildHavingClause(havingFilters, measure, isAdvanced, isUnified);
   
   return {
     whereClause,

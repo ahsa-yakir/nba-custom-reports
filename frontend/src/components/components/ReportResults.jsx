@@ -1,75 +1,51 @@
 import React, { useMemo } from 'react';
-import { Save, Download } from 'lucide-react';
+import { Save, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import ViewTypeSelector from './ViewTypeSelector';
 import DataTable from './DataTable';
-import { formatApiResults, getTableColumns } from '../utils/dataFormatting';
-import { apiService } from '../../services/api';
+import { getColumnsForView, getColumnMetadata } from '../utils/columnManager';
+import { getViewOptions, getViewDisplayInfo } from '../utils/viewDetection';
+import { validateDataForView } from '../utils/dataFormatting';
 
 const ReportResults = ({ 
   results, 
+  rawApiResponse,
   measure, 
   viewType, 
   sortConfig, 
   isLoading,
   filters,
+  detectedViewType,
+  needsNewFetch,
   onViewTypeChange, 
   onSortChange,
-  onFiltersChange,
-  onResultsChange
+  onFiltersChange
 }) => {
-  const sortedData = useMemo(() => {
-    if (results.length === 0) return [];
+  // Get columns for current view
+  const columns = useMemo(() => {
+    return getColumnsForView(viewType, measure, rawApiResponse, filters);
+  }, [viewType, measure, rawApiResponse, filters]);
 
-    const formattedData = formatApiResults(results);
+  // Get column metadata for enhanced rendering
+  const columnMetadata = useMemo(() => {
+    return getColumnMetadata(columns);
+  }, [columns]);
 
-    if (!sortConfig.column) return formattedData;
+  // Get available view options
+  const viewOptions = useMemo(() => {
+    return getViewOptions(rawApiResponse, filters);
+  }, [rawApiResponse, filters]);
 
-    const getValueForSorting = (item, column) => {
-      const columnMap = {
-        'Team': 'team', 'Name': 'name', 'TEAM': 'team', 'AGE': 'age',
-        'Games Played': 'gamesPlayed', 'Wins': 'wins', 'Losses': 'losses', 'Win %': 'winPct',
-        'PTS': 'pts', 'MINS': 'mins', 'FGM': 'fgm', 'FGA': 'fga', 'FG%': 'fg_pct',
-        '3PM': 'tpm', '3PA': 'tpa', '3P%': 'tp_pct',
-        'FTM': 'ftm', 'FTA': 'fta', 'FT%': 'ft_pct',
-        'OREB': 'oreb', 'DREB': 'dreb', 'REB': 'reb',
-        'AST': 'ast', 'TOV': 'tov', 'STL': 'stl', 'BLK': 'blk', 'PF': 'pf', '+/-': 'plusMinus',
-        'Offensive Rating': 'offensiveRating',
-        'Defensive Rating': 'defensiveRating',
-        'Net Rating': 'netRating',
-        'Usage %': 'usagePercentage',
-        'True Shooting %': 'trueShootingPercentage',
-        'Effective FG%': 'effectiveFieldGoalPercentage',
-        'Assist %': 'assistPercentage',
-        'Assist Turnover Ratio': 'assistTurnoverRatio',
-        'Assist Ratio': 'assistRatio',
-        'Offensive Rebound %': 'offensiveReboundPercentage',
-        'Defensive Rebound %': 'defensiveReboundPercentage',
-        'Rebound %': 'reboundPercentage',
-        'Turnover %': 'turnoverPercentage',
-        'PIE': 'pie',
-        'Pace': 'pace'
-      };
-      
-      return item[columnMap[column]] || '';
-    };
+  // Validate current data for selected view
+  const dataValidation = useMemo(() => {
+    return validateDataForView(results, viewType);
+  }, [results, viewType]);
 
-    let sortedResults = [...formattedData];
+  // Get view display information
+  const viewInfo = useMemo(() => {
+    return getViewDisplayInfo(viewType, rawApiResponse, filters);
+  }, [viewType, rawApiResponse, filters]);
 
-    sortedResults.sort((a, b) => {
-      const aValue = getValueForSorting(a, sortConfig.column);
-      const bValue = getValueForSorting(b, sortConfig.column);
-
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        const comparison = aValue.localeCompare(bValue);
-        return sortConfig.direction === 'asc' ? comparison : -comparison;
-      } else {
-        const comparison = (parseFloat(aValue) || 0) - (parseFloat(bValue) || 0);
-        return sortConfig.direction === 'asc' ? comparison : -comparison;
-      }
-    });
-
-    return sortedResults;
-  }, [results, sortConfig]);
+  if (results.length === 0 && !isLoading) return null;
 
   const handleSort = (column) => {
     let direction = 'desc';
@@ -79,91 +55,121 @@ const ReportResults = ({
     onSortChange({ column, direction });
   };
 
-  const handleViewChange = async (newViewType) => {
-    // Update view type immediately for UI feedback
-    onViewTypeChange(newViewType);
+  const handleExport = () => {
+    // Simple CSV export
+    if (results.length === 0) return;
     
-    // Set default sort for new view
-    let newSortConfig = null;
-    if (measure === 'Players') {
-      newSortConfig = { 
-        column: newViewType === 'advanced' ? 'Offensive Rating' : 'PTS', 
-        direction: 'desc' 
-      };
-    } else if (measure === 'Teams') {
-      newSortConfig = { 
-        column: newViewType === 'advanced' ? 'Net Rating' : 'Wins', 
-        direction: 'desc' 
-      };
-    }
+    const csvHeaders = columns.join(',');
+    const csvRows = results.map(row => 
+      columns.map(col => {
+        const value = row[col.toLowerCase().replace(/\s+/g, '_').replace(/%/g, 'pct')];
+        return typeof value === 'string' ? `"${value}"` : value || '';
+      }).join(',')
+    );
     
-    if (newSortConfig) {
-      onSortChange(newSortConfig);
-    }
-
-    // Regenerate report with new view type - this is essential because
-    // traditional and advanced views query different database tables
-    try {
-      const reportConfig = {
-        measure,
-        filters: filters.map(filter => ({
-          type: filter.type,
-          operator: filter.operator,
-          value: filter.value,
-          value2: filter.value2,
-          values: filter.values
-        })),
-        sortConfig: newSortConfig,
-        viewType: newViewType
-      };
-
-      console.log('Regenerating report for view change:', reportConfig);
-      const response = await apiService.generateReport(reportConfig);
-      
-      if (response.success && response.results) {
-        onResultsChange(response.results);
-        console.log(`Report regenerated: ${response.count} results for ${newViewType} view`);
-      } else {
-        throw new Error('Invalid response format');
-      }
-    } catch (error) {
-      console.error('Failed to regenerate report:', error);
-      // Could add error handling here - perhaps show a toast or revert view type
-    }
+    const csvContent = [csvHeaders, ...csvRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `nba_${measure.toLowerCase()}_${viewType}_report.csv`;
+    link.click();
+    
+    URL.revokeObjectURL(url);
   };
-
-  if (results.length === 0) return null;
-
-  const columns = getTableColumns(viewType, measure);
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
+      {/* Header with title and actions */}
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-xl font-semibold text-gray-800">Report Results</h3>
+        <div className="flex items-center space-x-3">
+          <h3 className="text-xl font-semibold text-gray-800">Report Results</h3>
+          {needsNewFetch && (
+            <div className="flex items-center space-x-2 px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm">
+              <RefreshCw className="w-4 h-4" />
+              <span>Data needs refresh</span>
+            </div>
+          )}
+        </div>
+        
         <div className="flex space-x-2">
-          <button className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600">
+          <button 
+            className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300"
+            disabled={results.length === 0}
+          >
             <Save className="w-4 h-4" />
             <span>Save Report</span>
           </button>
-          <button className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+          <button 
+            onClick={handleExport}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300"
+            disabled={results.length === 0}
+          >
             <Download className="w-4 h-4" />
-            <span>Export</span>
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
 
+      {/* View type selector with enhanced information */}
       <ViewTypeSelector 
         viewType={viewType}
-        onViewTypeChange={handleViewChange}
+        viewOptions={viewOptions}
+        detectedViewType={detectedViewType}
+        viewInfo={viewInfo}
+        onViewTypeChange={onViewTypeChange}
         isLoading={isLoading}
       />
 
+      {/* Data validation warnings */}
+      {dataValidation.length > 0 && (
+        <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-start space-x-2">
+            <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+            <div>
+              <h4 className="text-sm font-medium text-yellow-800 mb-1">Data Limitations</h4>
+              <ul className="text-sm text-yellow-700 space-y-1">
+                {dataValidation.map((issue, index) => (
+                  <li key={index}>• {issue}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Results count and view info */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm text-gray-600">
+          Showing {results.length} {measure.toLowerCase()} 
+          {viewType === 'custom' && ` with ${columns.length} selected columns`}
+        </div>
+      </div>
+
+      {/* Data table */}
       <DataTable 
-        data={sortedData}
+        data={results}
         columns={columns}
+        columnMetadata={columnMetadata}
         sortConfig={sortConfig}
+        viewType={viewType}
+        measure={measure}
         onSort={handleSort}
+        isLoading={isLoading}
       />
+
+      {/* Additional metadata footer */}
+      {rawApiResponse?.queryMetadata?.isUnified && (
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="text-xs text-gray-500">
+            Data source: Unified query combining traditional and advanced statistics
+            {rawApiResponse.queryMetadata.hasAdvancedData && (
+              <span className="ml-2">• Advanced stats available</span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
