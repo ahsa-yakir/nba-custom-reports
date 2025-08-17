@@ -1,7 +1,7 @@
 /**
  * Enhanced sorting utilities supporting unified queries
  */
-const { getSortColumnMapping } = require('./columnMappings');
+const { getSortColumnMapping } = require('./metadata');
 
 const buildOrderByClause = (sortConfig, measure, isAdvanced = false, isUnified = false) => {
   if (!sortConfig || !sortConfig.column) {
