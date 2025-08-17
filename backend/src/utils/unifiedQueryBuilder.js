@@ -1,9 +1,11 @@
 /**
  * Unified query builder for fetching both traditional and advanced stats
+ * Updated to use metadata system for filter analysis
  */
 const { buildWhereClause } = require('./whereClauseBuilder');
 const { buildOrderByClause, normalizeSortConfig } = require('./sortingUtils');
 const { hasAdvancedFilters, validateFilters } = require('./filterValidation');
+const { PLAYER_COLUMNS, TEAM_COLUMNS } = require('./metadata');
 
 // Test if database module loads properly
 let query;
@@ -200,26 +202,35 @@ const buildUnifiedQuery = (measure, filters, sortConfig, limit = 100) => {
   };
 };
 
+// Updated to use metadata system instead of hardcoded lists
 const analyzeFilterTypes = (filters) => {
-  const traditionalFilterTypes = [
-    'Team', 'Age', 'Games Played', 'MINS', 'PTS', 'FGM', 'FGA', 'FG%',
-    '3PM', '3PA', '3P%', 'FTM', 'FTA', 'FT%', 'OREB', 'DREB', 'REB',
-    'AST', 'TOV', 'STL', 'BLK', 'PF', '+/-', 'Wins', 'Losses', 'Win %', 'Points'
-  ];
+  const measureColumns = { ...PLAYER_COLUMNS, ...TEAM_COLUMNS };
   
-  const advancedFilterTypes = [
-    'Offensive Rating', 'Defensive Rating', 'Net Rating', 'Usage %',
-    'True Shooting %', 'Effective FG%', 'Assist %', 'Assist Turnover Ratio',
-    'Assist Ratio', 'Offensive Rebound %', 'Defensive Rebound %', 'Rebound %',
-    'Turnover %', 'PIE', 'Pace'
-  ];
+  let hasTraditional = false;
+  let hasAdvanced = false;
+  let hasIdentity = false;
   
-  const hasTraditional = filters.some(filter => traditionalFilterTypes.includes(filter.type));
-  const hasAdvanced = filters.some(filter => advancedFilterTypes.includes(filter.type));
+  filters.forEach(filter => {
+    const columnMeta = measureColumns[filter.type];
+    if (columnMeta) {
+      switch (columnMeta.category) {
+        case 'traditional':
+          hasTraditional = true;
+          break;
+        case 'advanced':
+          hasAdvanced = true;
+          break;
+        case 'identity':
+          hasIdentity = true;
+          break;
+      }
+    }
+  });
   
   return {
     hasTraditional,
     hasAdvanced,
+    hasIdentity,
     isMixed: hasTraditional && hasAdvanced,
     filterTypes: filters.map(f => f.type)
   };
