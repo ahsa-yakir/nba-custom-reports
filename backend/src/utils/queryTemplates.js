@@ -1,5 +1,5 @@
 /**
- * SQL query templates for different measure types and views
+ * Enhanced SQL query templates supporting both legacy and unified approaches
  */
 
 const getPlayerTraditionalQuery = () => {
@@ -27,6 +27,7 @@ const getPlayerTraditionalQuery = () => {
       ROUND(AVG(pgs.turnovers), 1) as tov,
       ROUND(AVG(pgs.steals), 1) as stl,
       ROUND(AVG(pgs.blocks), 1) as blk,
+      ROUND(AVG(pgs.personal_fouls), 1) as pf,
       ROUND(AVG(pgs.plus_minus), 1) as plus_minus
     FROM players p
     JOIN teams t ON p.team_id = t.id
@@ -219,6 +220,7 @@ const getSelectClause = (measure, isAdvanced = false) => {
         ROUND(AVG(pgs.turnovers), 1) as tov,
         ROUND(AVG(pgs.steals), 1) as stl,
         ROUND(AVG(pgs.blocks), 1) as blk,
+        ROUND(AVG(pgs.personal_fouls), 1) as pf,
         ROUND(AVG(pgs.plus_minus), 1) as plus_minus
       `;
     }

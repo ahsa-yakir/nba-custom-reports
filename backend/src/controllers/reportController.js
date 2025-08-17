@@ -1,7 +1,18 @@
 /**
- * Main report generation logic
+ * Enhanced report controller supporting unified queries
  */
-const { buildReportQuery, validateFilters, hasAdvancedFilters, executeQuery } = require('../utils/queryBuilder');
+const { 
+  buildReportQuery, 
+  validateFilters, 
+  hasAdvancedFilters, 
+  executeQuery,
+  getQueryMetadata,
+  analyzeFilterTypes,
+  getRecommendedViewType,
+  getActiveColumns
+} = require('../utils/queryBuilder');
+
+const { executeQuery: unifiedExecuteQuery } = require('../utils/unifiedQueryBuilder');
 
 const generateReport = async (req, res) => {
   try {
@@ -31,31 +42,72 @@ const generateReport = async (req, res) => {
       });
     }
     
-    // Determine if we should use advanced stats
-    const isAdvancedRequest = viewType === 'advanced' || hasAdvancedFilters(filters);
+    // Analyze filters and determine optimal query strategy
+    const filterAnalysis = analyzeFilterTypes(filters);
+    const recommendedViewType = getRecommendedViewType(filters);
+    const activeColumns = getActiveColumns(filters, measure);
     
-    console.log(`Generating ${measure} report with ${filters.length} filters (${isAdvancedRequest ? 'Advanced' : 'Traditional'} stats)`);
+    console.log(`Generating ${measure} report with ${filters.length} filters`);
+    console.log('Filter analysis:', filterAnalysis);
+    console.log('Recommended view:', recommendedViewType);
     
-    // Build and execute query using the enhanced query builder
-    const { sql, params, isAdvanced, normalizedSort } = buildReportQuery(measure, filters, sortConfig, 100, viewType);
+    // Build query using enhanced query builder
+    const queryResult = buildReportQuery(measure, filters, sortConfig, 100, viewType);
+    const { 
+      sql, 
+      params, 
+      isAdvanced, 
+      normalizedSort, 
+      isUnified,
+      filterAnalysis: analysisFromQuery,
+      recommendedViewType: recommendedFromQuery
+    } = queryResult;
     
+    console.log('Query type:', isUnified ? 'Unified' : (isAdvanced ? 'Advanced' : 'Traditional'));
     console.log('Executing SQL:', sql.substring(0, 200) + '...');
-    console.log('Parameters:', params);
-    console.log('Advanced View:', isAdvanced);
     
-    const result = await executeQuery(sql, params);
+    // Execute query using appropriate method
+    const result = isUnified 
+      ? await unifiedExecuteQuery(sql, params)
+      : await executeQuery(sql, params);
     
     console.log(`Query completed: ${result.rows.length} results`);
     
+    // Determine final view type for response
+    let finalViewType = viewType;
+    if (isUnified && filterAnalysis.isMixed) {
+      finalViewType = 'custom';
+    } else if (isAdvanced && (!viewType || viewType === 'traditional')) {
+      finalViewType = 'advanced';
+    } else if (!isAdvanced && viewType === 'advanced') {
+      finalViewType = 'traditional';
+    }
+    
+    // Enhanced response with metadata
     res.json({
       success: true,
       measure,
       filters,
       sortConfig: normalizedSort,
-      viewType: isAdvanced ? 'advanced' : 'traditional',
-      autoSwitched: isAdvanced && (!viewType || viewType === 'traditional'),
+      viewType: finalViewType,
+      queryMetadata: {
+        isUnified,
+        isAdvanced,
+        queryType: isUnified ? 'unified' : (isAdvanced ? 'advanced' : 'traditional'),
+        filterAnalysis: filterAnalysis,
+        recommendedViewType: recommendedViewType,
+        activeColumns: activeColumns,
+        autoSwitched: finalViewType !== viewType,
+        hasAdvancedData: isUnified || isAdvanced,
+        hasTraditionalData: true // Always true since we JOIN traditional stats
+      },
       count: result.rows.length,
-      results: result.rows
+      results: result.rows,
+      availableViews: {
+        traditional: true,
+        advanced: isUnified || isAdvanced,
+        custom: filterAnalysis.isMixed
+      }
     });
     
   } catch (error) {
@@ -102,23 +154,19 @@ const validateReport = async (req, res) => {
       }
     }
     
-    // Check for advanced filter usage
-    const hasAdvanced = filters ? hasAdvancedFilters(filters) : false;
-    const recommendedView = hasAdvanced ? 'advanced' : 'traditional';
-    
-    // Performance warnings
-    const warnings = [];
-    if (filters && filters.length > 10) {
-      warnings.push('Large number of filters may impact performance.');
-    }
-    
-    // Try to build the query to catch any other issues
+    // Get enhanced metadata if no critical issues
+    let queryMetadata = null;
     let queryValid = true;
     let queryError = null;
     
     if (issues.length === 0) {
       try {
-        buildReportQuery(measure, filters, sortConfig, 1, viewType);
+        queryMetadata = getQueryMetadata(measure, filters, viewType);
+        if (!queryMetadata.success) {
+          queryValid = false;
+          queryError = queryMetadata.error;
+          issues.push(`Query analysis failed: ${queryError}`);
+        }
       } catch (queryErr) {
         queryValid = false;
         queryError = queryErr.message;
@@ -126,22 +174,63 @@ const validateReport = async (req, res) => {
       }
     }
     
+    // Enhanced recommendations
+    const recommendations = {
+      message: 'Report configuration analyzed',
+      suggestions: []
+    };
+    
+    if (queryMetadata && queryMetadata.success) {
+      const { filterAnalysis, recommendedViewType, suggestions } = queryMetadata;
+      
+      recommendations.viewType = recommendedViewType;
+      recommendations.autoSwitch = recommendedViewType !== viewType;
+      
+      if (filterAnalysis.isMixed) {
+        recommendations.message = 'Mixed filter types detected. Custom view recommended.';
+        recommendations.suggestions.push('Consider using custom view for mixed traditional and advanced filters');
+      } else if (filterAnalysis.hasAdvanced && viewType !== 'advanced') {
+        recommendations.message = 'Advanced filters detected. Consider switching to advanced view.';
+        recommendations.suggestions.push('Switch to advanced view for optimal display of advanced statistics');
+      } else if (!filterAnalysis.hasAdvanced && viewType === 'advanced') {
+        recommendations.message = 'Only traditional filters detected. Traditional view may be sufficient.';
+        recommendations.suggestions.push('Traditional view may be more appropriate for these filters');
+      }
+      
+      if (suggestions) {
+        if (suggestions.useUnified) {
+          recommendations.suggestions.push('Unified query approach recommended for mixed filter types');
+        }
+        if (suggestions.switchToAdvanced) {
+          recommendations.suggestions.push('Advanced view recommended based on filter analysis');
+        }
+        if (suggestions.switchToTraditional) {
+          recommendations.suggestions.push('Traditional view may be sufficient for these filters');
+        }
+      }
+    }
+    
+    // Performance warnings
+    const warnings = [];
+    if (filters && filters.length > 10) {
+      warnings.push('Large number of filters may impact performance.');
+    }
+    
+    if (queryMetadata && queryMetadata.queryType === 'unified') {
+      warnings.push('Unified query may take longer but provides comprehensive data.');
+    }
+    
     res.json({
       success: true,
       valid: issues.length === 0 && queryValid,
       issues,
       warnings,
-      recommendations: {
-        viewType: recommendedView,
-        autoSwitch: hasAdvanced && viewType !== 'advanced',
-        message: hasAdvanced 
-          ? 'Advanced filters detected. Consider using advanced view for best results.'
-          : 'Traditional filters detected. Using traditional view.'
-      },
+      recommendations,
       query: {
         valid: queryValid,
         error: queryError
-      }
+      },
+      metadata: queryMetadata
     });
     
   } catch (error) {
@@ -173,16 +262,26 @@ const previewReport = async (req, res) => {
     }
     
     // Generate a small preview (limit to 5 results)
-    const { sql, params, isAdvanced } = buildReportQuery(measure, filters, sortConfig, 5, viewType);
-    const result = await executeQuery(sql, params);
+    const queryResult = buildReportQuery(measure, filters, sortConfig, 5, viewType);
+    const { sql, params, isAdvanced, isUnified, filterAnalysis, recommendedViewType } = queryResult;
+    
+    const result = isUnified 
+      ? await unifiedExecuteQuery(sql, params)
+      : await executeQuery(sql, params);
     
     res.json({
       success: true,
       measure,
-      viewType: isAdvanced ? 'advanced' : 'traditional',
+      viewType: isUnified && filterAnalysis?.isMixed ? 'custom' : (isAdvanced ? 'advanced' : 'traditional'),
       preview: result.rows,
       count: result.rows.length,
-      message: `Preview of first 5 results (${result.rows.length} returned)`
+      message: `Preview of first 5 results (${result.rows.length} returned)`,
+      metadata: {
+        isUnified,
+        queryType: isUnified ? 'unified' : (isAdvanced ? 'advanced' : 'traditional'),
+        recommendedViewType,
+        filterAnalysis
+      }
     });
     
   } catch (error) {
@@ -194,8 +293,43 @@ const previewReport = async (req, res) => {
   }
 };
 
+const getQueryInfo = async (req, res) => {
+  try {
+    const { measure, filters, viewType } = req.body;
+    
+    if (!measure || !['Players', 'Teams'].includes(measure)) {
+      return res.status(400).json({
+        error: 'Invalid measure',
+        message: 'Must be "Players" or "Teams"'
+      });
+    }
+    
+    if (!filters || !Array.isArray(filters)) {
+      return res.status(400).json({
+        error: 'Invalid filters',
+        message: 'Filters must be an array'
+      });
+    }
+    
+    const metadata = getQueryMetadata(measure, filters, viewType);
+    
+    res.json({
+      success: true,
+      ...metadata
+    });
+    
+  } catch (error) {
+    console.error('Query info error:', error);
+    res.status(500).json({
+      error: 'Failed to analyze query',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   generateReport,
   validateReport,
-  previewReport
+  previewReport,
+  getQueryInfo
 };
