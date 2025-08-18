@@ -1,4 +1,4 @@
-// Database setup script - creates tables and indexes
+// Database setup script - creates tables and indexes including career statistics
 const fs = require('fs');
 const path = require('path');
 const { query } = require('../config/database');
@@ -100,19 +100,27 @@ const checkExistingSchema = async () => {
 };
 
 /**
- * Verify all expected tables exist
+ * Verify all expected tables exist (including career stats tables)
  */
 const verifyTablesCreated = async () => {
   console.log('🔍 Verifying all tables were created...');
   
   const expectedTables = [
+    // Original tables
     'teams',
     'players', 
     'games',
     'player_game_stats',
     'player_advanced_stats',
     'team_game_stats',
-    'team_advanced_stats'
+    'team_advanced_stats',
+    // Career statistics tables
+    'player_season_totals_regular',
+    'player_career_totals_regular',
+    'player_season_totals_playoffs',
+    'player_career_totals_playoffs',
+    'player_season_rankings_regular',
+    'player_season_rankings_playoffs'
   ];
   
   try {
@@ -141,16 +149,20 @@ const verifyTablesCreated = async () => {
 };
 
 /**
- * Verify all expected views exist
+ * Verify all expected views exist (including career stats views)
  */
 const verifyViewsCreated = async () => {
   console.log('🔍 Verifying all views were created...');
   
   const expectedViews = [
+    // Original views
     'player_season_averages',
     'player_advanced_season_averages',
     'team_season_totals',
-    'team_advanced_season_totals'
+    'team_advanced_season_totals',
+    // Career statistics views
+    'player_career_overview',
+    'player_season_progression'
   ];
   
   try {
@@ -178,7 +190,7 @@ const verifyViewsCreated = async () => {
 };
 
 /**
- * Verify indexes were created for all tables
+ * Verify indexes were created for all tables (including career stats)
  */
 const verifyIndexesCreated = async () => {
   console.log('🔍 Verifying indexes were created...');
@@ -200,15 +212,23 @@ const verifyIndexesCreated = async () => {
       indexCounts[row.tablename] = parseInt(row.index_count);
     });
     
-    // Expected minimum index counts (including primary key indexes)
+    // Expected minimum index counts (including primary key indexes and career stats indexes)
     const expectedMinIndexes = {
+      // Original tables
       'teams': 3,
       'players': 5,
       'games': 6,
       'player_game_stats': 10,
       'player_advanced_stats': 10,
       'team_game_stats': 8,
-      'team_advanced_stats': 8
+      'team_advanced_stats': 8,
+      // Career statistics tables
+      'player_season_totals_regular': 5,
+      'player_career_totals_regular': 3,
+      'player_season_totals_playoffs': 5,
+      'player_career_totals_playoffs': 3,
+      'player_season_rankings_regular': 4,
+      'player_season_rankings_playoffs': 4
     };
     
     const issues = [];
@@ -239,7 +259,7 @@ const verifyIndexesCreated = async () => {
 };
 
 /**
- * Verify foreign key constraints exist
+ * Verify foreign key constraints exist (including career stats FKs)
  */
 const verifyForeignKeys = async () => {
   console.log('🔍 Verifying foreign key constraints...');
@@ -266,8 +286,8 @@ const verifyForeignKeys = async () => {
     
     const foreignKeys = result.rows;
     
-    // Expected foreign key count
-    const expectedFKCount = 12; // 2 players, 2 games, 3 player_game_stats, 3 player_advanced_stats, 2 team_game_stats, 2 team_advanced_stats
+    // Expected foreign key count (original 12 + career stats 12)
+    const expectedFKCount = 24;
     
     if (foreignKeys.length < expectedFKCount) {
       throw new Error(`Expected at least ${expectedFKCount} foreign keys, found ${foreignKeys.length}`);
@@ -297,13 +317,13 @@ const verifyForeignKeys = async () => {
 };
 
 /**
- * Test sample queries on the new schema
+ * Test sample queries on the new schema (including career stats)
  */
 const testSampleQueries = async () => {
   console.log('🔍 Testing sample queries...');
   
   try {
-    // Test basic table access
+    // Test basic table access (original tables)
     await query('SELECT COUNT(*) FROM teams');
     await query('SELECT COUNT(*) FROM players');
     await query('SELECT COUNT(*) FROM games');
@@ -312,17 +332,30 @@ const testSampleQueries = async () => {
     await query('SELECT COUNT(*) FROM team_game_stats');
     await query('SELECT COUNT(*) FROM team_advanced_stats');
     
-    // Test view access
+    // Test career statistics tables
+    await query('SELECT COUNT(*) FROM player_season_totals_regular');
+    await query('SELECT COUNT(*) FROM player_career_totals_regular');
+    await query('SELECT COUNT(*) FROM player_season_totals_playoffs');
+    await query('SELECT COUNT(*) FROM player_career_totals_playoffs');
+    await query('SELECT COUNT(*) FROM player_season_rankings_regular');
+    await query('SELECT COUNT(*) FROM player_season_rankings_playoffs');
+    
+    // Test view access (original views)
     await query('SELECT COUNT(*) FROM player_season_averages');
     await query('SELECT COUNT(*) FROM player_advanced_season_averages');
     await query('SELECT COUNT(*) FROM team_season_totals');
     await query('SELECT COUNT(*) FROM team_advanced_season_totals');
     
-    // Test a complex join query
+    // Test career statistics views
+    await query('SELECT COUNT(*) FROM player_career_overview');
+    await query('SELECT COUNT(*) FROM player_season_progression');
+    
+    // Test a complex join query with career stats
     await query(`
       SELECT COUNT(*) 
       FROM players p 
       JOIN teams t ON p.team_id = t.id 
+      LEFT JOIN player_career_totals_regular pctr ON p.id = pctr.player_id
       WHERE p.position IS NOT NULL
     `);
     
@@ -335,7 +368,7 @@ const testSampleQueries = async () => {
 };
 
 /**
- * Setup the complete database schema
+ * Setup the complete database schema (including career statistics)
  */
 const setupDatabase = async (force = false) => {
   console.log('🚀 Starting database setup...');
@@ -360,10 +393,11 @@ const setupDatabase = async (force = false) => {
       console.log('⚠️  FORCE MODE: Will drop and recreate existing tables!');
     }
     
-    // Run migrations in order
-    console.log('📝 Running migrations...');
+    // Run migrations in order (including career stats)
+    console.log('📁 Running migrations...');
     await runMigration('001_create_tables.sql');
     await runMigration('002_create_indexes.sql');
+    await runMigration('003_create_career_stats_tables.sql');
     
     // Comprehensive verification
     console.log('🔍 Running comprehensive verification...');
@@ -375,11 +409,13 @@ const setupDatabase = async (force = false) => {
     
     console.log('🎉 Database setup completed successfully!');
     console.log('📊 Schema includes:');
-    console.log('   - 7 tables (teams, players, games, player_game_stats, player_advanced_stats, team_game_stats, team_advanced_stats)');
-    console.log('   - 4 views (traditional and advanced season averages)');
+    console.log('   - 13 tables (7 original + 6 career statistics)');
+    console.log('   - 6 views (4 original + 2 career statistics)');
     console.log('   - Comprehensive indexes for performance');
     console.log('   - Foreign key constraints for data integrity');
+    console.log('   - Career statistics support for player analytics');
     console.log('📊 Ready to load data with: npm run seed');
+    console.log('🏆 Ready to load career stats with: python nba_pipeline.py load-career-active');
     
     return true;
     
@@ -391,22 +427,32 @@ const setupDatabase = async (force = false) => {
 };
 
 /**
- * Clean up database (drop all tables)
+ * Clean up database (drop all tables including career stats)
  */
 const cleanDatabase = async () => {
   console.log('🧹 Cleaning database...');
   
   try {
-    // Drop views first
+    // Drop views first (including career stats views)
     await query(`
+      DROP VIEW IF EXISTS player_career_overview CASCADE;
+      DROP VIEW IF EXISTS player_season_progression CASCADE;
       DROP VIEW IF EXISTS player_season_averages CASCADE;
       DROP VIEW IF EXISTS player_advanced_season_averages CASCADE;
       DROP VIEW IF EXISTS team_season_totals CASCADE;
       DROP VIEW IF EXISTS team_advanced_season_totals CASCADE;
     `);
     
-    // Drop tables in reverse order of dependencies
+    // Drop tables in reverse order of dependencies (including career stats)
     const dropOrder = [
+      // Career statistics tables (drop first due to FKs)
+      'player_season_rankings_playoffs',
+      'player_season_rankings_regular',
+      'player_career_totals_playoffs',
+      'player_career_totals_regular',
+      'player_season_totals_playoffs',
+      'player_season_totals_regular',
+      // Original tables
       'player_game_stats',
       'player_advanced_stats',
       'team_game_stats', 
@@ -430,7 +476,7 @@ const cleanDatabase = async () => {
 };
 
 /**
- * Get database status and statistics
+ * Get database status and statistics (including career stats)
  */
 const getDatabaseStatus = async () => {
   console.log('📊 Gathering database status...');
@@ -488,13 +534,28 @@ const getDatabaseStatus = async () => {
     };
     
     console.log('Database Status:');
-    console.log(`   Tables: ${status.tables}`);
-    console.log(`   Views: ${status.views}`);
+    console.log(`   Tables: ${status.tables} (expected 13 with career stats)`);
+    console.log(`   Views: ${status.views} (expected 6 with career stats)`);
     console.log(`   Indexes: ${status.indexes}`);
-    console.log(`   Foreign Keys: ${status.foreignKeys}`);
+    console.log(`   Foreign Keys: ${status.foreignKeys} (expected 24 with career stats)`);
     console.log('Data Counts:');
-    Object.entries(status.dataCounts).forEach(([table, count]) => {
-      console.log(`   ${table}: ${count}`);
+    
+    // Group data counts by category
+    const originalTables = ['teams', 'players', 'games', 'player_game_stats', 'player_advanced_stats', 'team_game_stats', 'team_advanced_stats'];
+    const careerTables = ['player_season_totals_regular', 'player_career_totals_regular', 'player_season_totals_playoffs', 'player_career_totals_playoffs', 'player_season_rankings_regular', 'player_season_rankings_playoffs'];
+    
+    console.log('  Original Tables:');
+    originalTables.forEach(table => {
+      if (dataCounts.hasOwnProperty(table)) {
+        console.log(`    ${table}: ${dataCounts[table]}`);
+      }
+    });
+    
+    console.log('  Career Statistics Tables:');
+    careerTables.forEach(table => {
+      if (dataCounts.hasOwnProperty(table)) {
+        console.log(`    ${table}: ${dataCounts[table]}`);
+      }
     });
     
     return status;

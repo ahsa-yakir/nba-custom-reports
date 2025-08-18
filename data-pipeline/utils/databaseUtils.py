@@ -324,3 +324,387 @@ class DatabaseManager:
             conn.commit()
             cursor.close()
             logger.info(f"Inserted {len(player_stats)} player advanced stats")
+
+    def get_all_player_ids(self) -> List[str]:
+        """Get all player IDs from database"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM players ORDER BY id")
+            player_ids = [str(row[0]) for row in cursor.fetchall()]
+            cursor.close()
+            return player_ids
+
+    def get_active_player_ids(self) -> List[str]:
+        """Get player IDs for currently active players (those with a team)"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id FROM players 
+                WHERE team_id IS NOT NULL 
+                ORDER BY id
+            """)
+            player_ids = [str(row[0]) for row in cursor.fetchall()]
+            cursor.close()
+            return player_ids
+
+    def insert_player_season_totals_regular(self, season_totals: List) -> None:
+        """Insert player regular season totals"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats_data = []
+            for stat in season_totals:
+                stats_data.append((
+                    stat.player_id, stat.season_id, stat.league_id, stat.team_id, 
+                    stat.team_abbreviation, stat.player_age,
+                    stat.games_played, stat.games_started, stat.minutes_played,
+                    stat.field_goals_made, stat.field_goals_attempted, stat.field_goal_percentage,
+                    stat.three_pointers_made, stat.three_pointers_attempted, stat.three_point_percentage,
+                    stat.free_throws_made, stat.free_throws_attempted, stat.free_throw_percentage,
+                    stat.offensive_rebounds, stat.defensive_rebounds, stat.total_rebounds,
+                    stat.assists, stat.steals, stat.blocks, stat.turnovers, stat.personal_fouls, stat.points
+                ))
+            
+            execute_values(
+                cursor,
+                """INSERT INTO player_season_totals_regular (
+                    player_id, season_id, league_id, team_id, team_abbreviation, player_age,
+                    games_played, games_started, minutes_played,
+                    field_goals_made, field_goals_attempted, field_goal_percentage,
+                    three_pointers_made, three_pointers_attempted, three_point_percentage,
+                    free_throws_made, free_throws_attempted, free_throw_percentage,
+                    offensive_rebounds, defensive_rebounds, total_rebounds,
+                    assists, steals, blocks, turnovers, personal_fouls, points
+                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                    team_id = EXCLUDED.team_id,
+                    team_abbreviation = EXCLUDED.team_abbreviation,
+                    player_age = EXCLUDED.player_age,
+                    games_played = EXCLUDED.games_played,
+                    games_started = EXCLUDED.games_started,
+                    minutes_played = EXCLUDED.minutes_played,
+                    field_goals_made = EXCLUDED.field_goals_made,
+                    field_goals_attempted = EXCLUDED.field_goals_attempted,
+                    field_goal_percentage = EXCLUDED.field_goal_percentage,
+                    three_pointers_made = EXCLUDED.three_pointers_made,
+                    three_pointers_attempted = EXCLUDED.three_pointers_attempted,
+                    three_point_percentage = EXCLUDED.three_point_percentage,
+                    free_throws_made = EXCLUDED.free_throws_made,
+                    free_throws_attempted = EXCLUDED.free_throws_attempted,
+                    free_throw_percentage = EXCLUDED.free_throw_percentage,
+                    offensive_rebounds = EXCLUDED.offensive_rebounds,
+                    defensive_rebounds = EXCLUDED.defensive_rebounds,
+                    total_rebounds = EXCLUDED.total_rebounds,
+                    assists = EXCLUDED.assists,
+                    steals = EXCLUDED.steals,
+                    blocks = EXCLUDED.blocks,
+                    turnovers = EXCLUDED.turnovers,
+                    personal_fouls = EXCLUDED.personal_fouls,
+                    points = EXCLUDED.points,
+                    updated_at = CURRENT_TIMESTAMP""",
+                stats_data
+            )
+            
+            conn.commit()
+            cursor.close()
+            logger.info(f"Inserted {len(season_totals)} player regular season totals")
+
+    def insert_player_career_totals_regular(self, career_totals: List) -> None:
+        """Insert player regular season career totals"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats_data = []
+            for stat in career_totals:
+                stats_data.append((
+                    stat.player_id, stat.league_id,
+                    stat.games_played, stat.games_started, stat.minutes_played,
+                    stat.field_goals_made, stat.field_goals_attempted, stat.field_goal_percentage,
+                    stat.three_pointers_made, stat.three_pointers_attempted, stat.three_point_percentage,
+                    stat.free_throws_made, stat.free_throws_attempted, stat.free_throw_percentage,
+                    stat.offensive_rebounds, stat.defensive_rebounds, stat.total_rebounds,
+                    stat.assists, stat.steals, stat.blocks, stat.turnovers, stat.personal_fouls, stat.points
+                ))
+            
+            execute_values(
+                cursor,
+                """INSERT INTO player_career_totals_regular (
+                    player_id, league_id,
+                    games_played, games_started, minutes_played,
+                    field_goals_made, field_goals_attempted, field_goal_percentage,
+                    three_pointers_made, three_pointers_attempted, three_point_percentage,
+                    free_throws_made, free_throws_attempted, free_throw_percentage,
+                    offensive_rebounds, defensive_rebounds, total_rebounds,
+                    assists, steals, blocks, turnovers, personal_fouls, points
+                ) VALUES %s ON CONFLICT (player_id) DO UPDATE SET
+                    league_id = EXCLUDED.league_id,
+                    games_played = EXCLUDED.games_played,
+                    games_started = EXCLUDED.games_started,
+                    minutes_played = EXCLUDED.minutes_played,
+                    field_goals_made = EXCLUDED.field_goals_made,
+                    field_goals_attempted = EXCLUDED.field_goals_attempted,
+                    field_goal_percentage = EXCLUDED.field_goal_percentage,
+                    three_pointers_made = EXCLUDED.three_pointers_made,
+                    three_pointers_attempted = EXCLUDED.three_pointers_attempted,
+                    three_point_percentage = EXCLUDED.three_point_percentage,
+                    free_throws_made = EXCLUDED.free_throws_made,
+                    free_throws_attempted = EXCLUDED.free_throws_attempted,
+                    free_throw_percentage = EXCLUDED.free_throw_percentage,
+                    offensive_rebounds = EXCLUDED.offensive_rebounds,
+                    defensive_rebounds = EXCLUDED.defensive_rebounds,
+                    total_rebounds = EXCLUDED.total_rebounds,
+                    assists = EXCLUDED.assists,
+                    steals = EXCLUDED.steals,
+                    blocks = EXCLUDED.blocks,
+                    turnovers = EXCLUDED.turnovers,
+                    personal_fouls = EXCLUDED.personal_fouls,
+                    points = EXCLUDED.points,
+                    updated_at = CURRENT_TIMESTAMP""",
+                stats_data
+            )
+            
+            conn.commit()
+            cursor.close()
+            logger.info(f"Inserted {len(career_totals)} player regular season career totals")
+
+    def insert_player_season_totals_playoffs(self, season_totals: List) -> None:
+        """Insert player playoff season totals"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats_data = []
+            for stat in season_totals:
+                stats_data.append((
+                    stat.player_id, stat.season_id, stat.league_id, stat.team_id, 
+                    stat.team_abbreviation, stat.player_age,
+                    stat.games_played, stat.games_started, stat.minutes_played,
+                    stat.field_goals_made, stat.field_goals_attempted, stat.field_goal_percentage,
+                    stat.three_pointers_made, stat.three_pointers_attempted, stat.three_point_percentage,
+                    stat.free_throws_made, stat.free_throws_attempted, stat.free_throw_percentage,
+                    stat.offensive_rebounds, stat.defensive_rebounds, stat.total_rebounds,
+                    stat.assists, stat.steals, stat.blocks, stat.turnovers, stat.personal_fouls, stat.points
+                ))
+            
+            execute_values(
+                cursor,
+                """INSERT INTO player_season_totals_playoffs (
+                    player_id, season_id, league_id, team_id, team_abbreviation, player_age,
+                    games_played, games_started, minutes_played,
+                    field_goals_made, field_goals_attempted, field_goal_percentage,
+                    three_pointers_made, three_pointers_attempted, three_point_percentage,
+                    free_throws_made, free_throws_attempted, free_throw_percentage,
+                    offensive_rebounds, defensive_rebounds, total_rebounds,
+                    assists, steals, blocks, turnovers, personal_fouls, points
+                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                    team_id = EXCLUDED.team_id,
+                    team_abbreviation = EXCLUDED.team_abbreviation,
+                    player_age = EXCLUDED.player_age,
+                    games_played = EXCLUDED.games_played,
+                    games_started = EXCLUDED.games_started,
+                    minutes_played = EXCLUDED.minutes_played,
+                    field_goals_made = EXCLUDED.field_goals_made,
+                    field_goals_attempted = EXCLUDED.field_goals_attempted,
+                    field_goal_percentage = EXCLUDED.field_goal_percentage,
+                    three_pointers_made = EXCLUDED.three_pointers_made,
+                    three_pointers_attempted = EXCLUDED.three_pointers_attempted,
+                    three_point_percentage = EXCLUDED.three_point_percentage,
+                    free_throws_made = EXCLUDED.free_throws_made,
+                    free_throws_attempted = EXCLUDED.free_throws_attempted,
+                    free_throw_percentage = EXCLUDED.free_throw_percentage,
+                    offensive_rebounds = EXCLUDED.offensive_rebounds,
+                    defensive_rebounds = EXCLUDED.defensive_rebounds,
+                    total_rebounds = EXCLUDED.total_rebounds,
+                    assists = EXCLUDED.assists,
+                    steals = EXCLUDED.steals,
+                    blocks = EXCLUDED.blocks,
+                    turnovers = EXCLUDED.turnovers,
+                    personal_fouls = EXCLUDED.personal_fouls,
+                    points = EXCLUDED.points,
+                    updated_at = CURRENT_TIMESTAMP""",
+                stats_data
+            )
+            
+            conn.commit()
+            cursor.close()
+            logger.info(f"Inserted {len(season_totals)} player playoff season totals")
+
+    def insert_player_career_totals_playoffs(self, career_totals: List) -> None:
+        """Insert player playoff career totals"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats_data = []
+            for stat in career_totals:
+                stats_data.append((
+                    stat.player_id, stat.league_id,
+                    stat.games_played, stat.games_started, stat.minutes_played,
+                    stat.field_goals_made, stat.field_goals_attempted, stat.field_goal_percentage,
+                    stat.three_pointers_made, stat.three_pointers_attempted, stat.three_point_percentage,
+                    stat.free_throws_made, stat.free_throws_attempted, stat.free_throw_percentage,
+                    stat.offensive_rebounds, stat.defensive_rebounds, stat.total_rebounds,
+                    stat.assists, stat.steals, stat.blocks, stat.turnovers, stat.personal_fouls, stat.points
+                ))
+            
+            execute_values(
+                cursor,
+                """INSERT INTO player_career_totals_playoffs (
+                    player_id, league_id,
+                    games_played, games_started, minutes_played,
+                    field_goals_made, field_goals_attempted, field_goal_percentage,
+                    three_pointers_made, three_pointers_attempted, three_point_percentage,
+                    free_throws_made, free_throws_attempted, free_throw_percentage,
+                    offensive_rebounds, defensive_rebounds, total_rebounds,
+                    assists, steals, blocks, turnovers, personal_fouls, points
+                ) VALUES %s ON CONFLICT (player_id) DO UPDATE SET
+                    league_id = EXCLUDED.league_id,
+                    games_played = EXCLUDED.games_played,
+                    games_started = EXCLUDED.games_started,
+                    minutes_played = EXCLUDED.minutes_played,
+                    field_goals_made = EXCLUDED.field_goals_made,
+                    field_goals_attempted = EXCLUDED.field_goals_attempted,
+                    field_goal_percentage = EXCLUDED.field_goal_percentage,
+                    three_pointers_made = EXCLUDED.three_pointers_made,
+                    three_pointers_attempted = EXCLUDED.three_pointers_attempted,
+                    three_point_percentage = EXCLUDED.three_point_percentage,
+                    free_throws_made = EXCLUDED.free_throws_made,
+                    free_throws_attempted = EXCLUDED.free_throws_attempted,
+                    free_throw_percentage = EXCLUDED.free_throw_percentage,
+                    offensive_rebounds = EXCLUDED.offensive_rebounds,
+                    defensive_rebounds = EXCLUDED.defensive_rebounds,
+                    total_rebounds = EXCLUDED.total_rebounds,
+                    assists = EXCLUDED.assists,
+                    steals = EXCLUDED.steals,
+                    blocks = EXCLUDED.blocks,
+                    turnovers = EXCLUDED.turnovers,
+                    personal_fouls = EXCLUDED.personal_fouls,
+                    points = EXCLUDED.points,
+                    updated_at = CURRENT_TIMESTAMP""",
+                stats_data
+            )
+            
+            conn.commit()
+            cursor.close()
+            logger.info(f"Inserted {len(career_totals)} player playoff career totals")
+
+    def insert_player_season_rankings_regular(self, season_rankings: List) -> None:
+        """Insert player regular season rankings"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats_data = []
+            for stat in season_rankings:
+                stats_data.append((
+                    stat.player_id, stat.season_id, stat.league_id, stat.team_id, 
+                    stat.team_abbreviation, stat.player_age,
+                    stat.games_played_rank, stat.games_started_rank, stat.minutes_played_rank,
+                    stat.field_goals_made_rank, stat.field_goals_attempted_rank, stat.field_goal_percentage_rank,
+                    stat.three_pointers_made_rank, stat.three_pointers_attempted_rank, stat.three_point_percentage_rank,
+                    stat.free_throws_made_rank, stat.free_throws_attempted_rank, stat.free_throw_percentage_rank,
+                    stat.offensive_rebounds_rank, stat.defensive_rebounds_rank, stat.total_rebounds_rank,
+                    stat.assists_rank, stat.steals_rank, stat.blocks_rank, 
+                    stat.turnovers_rank, stat.personal_fouls_rank, stat.points_rank
+                ))
+            
+            execute_values(
+                cursor,
+                """INSERT INTO player_season_rankings_regular (
+                    player_id, season_id, league_id, team_id, team_abbreviation, player_age,
+                    games_played_rank, games_started_rank, minutes_played_rank,
+                    field_goals_made_rank, field_goals_attempted_rank, field_goal_percentage_rank,
+                    three_pointers_made_rank, three_pointers_attempted_rank, three_point_percentage_rank,
+                    free_throws_made_rank, free_throws_attempted_rank, free_throw_percentage_rank,
+                    offensive_rebounds_rank, defensive_rebounds_rank, total_rebounds_rank,
+                    assists_rank, steals_rank, blocks_rank, turnovers_rank, personal_fouls_rank, points_rank
+                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                    team_id = EXCLUDED.team_id,
+                    team_abbreviation = EXCLUDED.team_abbreviation,
+                    player_age = EXCLUDED.player_age,
+                    games_played_rank = EXCLUDED.games_played_rank,
+                    games_started_rank = EXCLUDED.games_started_rank,
+                    minutes_played_rank = EXCLUDED.minutes_played_rank,
+                    field_goals_made_rank = EXCLUDED.field_goals_made_rank,
+                    field_goals_attempted_rank = EXCLUDED.field_goals_attempted_rank,
+                    field_goal_percentage_rank = EXCLUDED.field_goal_percentage_rank,
+                    three_pointers_made_rank = EXCLUDED.three_pointers_made_rank,
+                    three_pointers_attempted_rank = EXCLUDED.three_pointers_attempted_rank,
+                    three_point_percentage_rank = EXCLUDED.three_point_percentage_rank,
+                    free_throws_made_rank = EXCLUDED.free_throws_made_rank,
+                    free_throws_attempted_rank = EXCLUDED.free_throws_attempted_rank,
+                    free_throw_percentage_rank = EXCLUDED.free_throw_percentage_rank,
+                    offensive_rebounds_rank = EXCLUDED.offensive_rebounds_rank,
+                    defensive_rebounds_rank = EXCLUDED.defensive_rebounds_rank,
+                    total_rebounds_rank = EXCLUDED.total_rebounds_rank,
+                    assists_rank = EXCLUDED.assists_rank,
+                    steals_rank = EXCLUDED.steals_rank,
+                    blocks_rank = EXCLUDED.blocks_rank,
+                    turnovers_rank = EXCLUDED.turnovers_rank,
+                    personal_fouls_rank = EXCLUDED.personal_fouls_rank,
+                    points_rank = EXCLUDED.points_rank,
+                    updated_at = CURRENT_TIMESTAMP""",
+                stats_data
+            )
+            
+            conn.commit()
+            cursor.close()
+            logger.info(f"Inserted {len(season_rankings)} player regular season rankings")
+
+    def insert_player_season_rankings_playoffs(self, season_rankings: List) -> None:
+        """Insert player playoff season rankings"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            stats_data = []
+            for stat in season_rankings:
+                stats_data.append((
+                    stat.player_id, stat.season_id, stat.league_id, stat.team_id, 
+                    stat.team_abbreviation, stat.player_age,
+                    stat.games_played_rank, stat.games_started_rank, stat.minutes_played_rank,
+                    stat.field_goals_made_rank, stat.field_goals_attempted_rank, stat.field_goal_percentage_rank,
+                    stat.three_pointers_made_rank, stat.three_pointers_attempted_rank, stat.three_point_percentage_rank,
+                    stat.free_throws_made_rank, stat.free_throws_attempted_rank, stat.free_throw_percentage_rank,
+                    stat.offensive_rebounds_rank, stat.defensive_rebounds_rank, stat.total_rebounds_rank,
+                    stat.assists_rank, stat.steals_rank, stat.blocks_rank, 
+                    stat.turnovers_rank, stat.personal_fouls_rank, stat.points_rank
+                ))
+            
+            execute_values(
+                cursor,
+                """INSERT INTO player_season_rankings_playoffs (
+                    player_id, season_id, league_id, team_id, team_abbreviation, player_age,
+                    games_played_rank, games_started_rank, minutes_played_rank,
+                    field_goals_made_rank, field_goals_attempted_rank, field_goal_percentage_rank,
+                    three_pointers_made_rank, three_pointers_attempted_rank, three_point_percentage_rank,
+                    free_throws_made_rank, free_throws_attempted_rank, free_throw_percentage_rank,
+                    offensive_rebounds_rank, defensive_rebounds_rank, total_rebounds_rank,
+                    assists_rank, steals_rank, blocks_rank, turnovers_rank, personal_fouls_rank, points_rank
+                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                    team_id = EXCLUDED.team_id,
+                    team_abbreviation = EXCLUDED.team_abbreviation,
+                    player_age = EXCLUDED.player_age,
+                    games_played_rank = EXCLUDED.games_played_rank,
+                    games_started_rank = EXCLUDED.games_started_rank,
+                    minutes_played_rank = EXCLUDED.minutes_played_rank,
+                    field_goals_made_rank = EXCLUDED.field_goals_made_rank,
+                    field_goals_attempted_rank = EXCLUDED.field_goals_attempted_rank,
+                    field_goal_percentage_rank = EXCLUDED.field_goal_percentage_rank,
+                    three_pointers_made_rank = EXCLUDED.three_pointers_made_rank,
+                    three_pointers_attempted_rank = EXCLUDED.three_pointers_attempted_rank,
+                    three_point_percentage_rank = EXCLUDED.three_point_percentage_rank,
+                    free_throws_made_rank = EXCLUDED.free_throws_made_rank,
+                    free_throws_attempted_rank = EXCLUDED.free_throws_attempted_rank,
+                    free_throw_percentage_rank = EXCLUDED.free_throw_percentage_rank,
+                    offensive_rebounds_rank = EXCLUDED.offensive_rebounds_rank,
+                    defensive_rebounds_rank = EXCLUDED.defensive_rebounds_rank,
+                    total_rebounds_rank = EXCLUDED.total_rebounds_rank,
+                    assists_rank = EXCLUDED.assists_rank,
+                    steals_rank = EXCLUDED.steals_rank,
+                    blocks_rank = EXCLUDED.blocks_rank,
+                    turnovers_rank = EXCLUDED.turnovers_rank,
+                    personal_fouls_rank = EXCLUDED.personal_fouls_rank,
+                    points_rank = EXCLUDED.points_rank,
+                    updated_at = CURRENT_TIMESTAMP""",
+                stats_data
+            )
+            
+            conn.commit()
+            cursor.close()
+            logger.info(f"Inserted {len(season_rankings)} player playoff season rankings")
