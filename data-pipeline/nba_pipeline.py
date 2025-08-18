@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-NBA Data Pipeline - Main Orchestrator (Simplified)
-Coordinates team initialization, player initialization, and data extraction
+NBA Data Pipeline - Main Orchestrator (Enhanced with Career Stats)
+Coordinates team initialization, player initialization, data extraction, and career stats
 """
 
 import sys
@@ -13,13 +13,14 @@ from initialize_teams import TeamInitializer
 from initialize_active_players import PlayerInitializer
 from extractors.traditionalExtractor import TraditionalStatsExtractor
 from extractors.advancedExtractor import AdvancedStatsExtractor
+from extractors.careerExtractor import CareerStatsExtractor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class NBADataPipeline:
-    """Main NBA Data Pipeline orchestrator"""
+    """Main NBA Data Pipeline orchestrator with career statistics support"""
     
     def __init__(self, db_config: Dict[str, str]):
         """Initialize pipeline with database configuration"""
@@ -28,6 +29,7 @@ class NBADataPipeline:
         self.player_initializer = PlayerInitializer(db_config)
         self.traditional_extractor = TraditionalStatsExtractor(db_config)
         self.advanced_extractor = AdvancedStatsExtractor(db_config)
+        self.career_extractor = CareerStatsExtractor(db_config)
     
     def clear_all_data(self):
         """Clear all data from database in correct order"""
@@ -37,7 +39,26 @@ class NBADataPipeline:
         with psycopg2.connect(**self.db_config) as conn:
             cursor = conn.cursor()
             
-            # Delete in correct order to respect foreign keys
+            # Delete career stats first (newest tables)
+            logger.info("  - Clearing player season rankings (playoffs)...")
+            cursor.execute('DELETE FROM player_season_rankings_playoffs')
+            
+            logger.info("  - Clearing player season rankings (regular)...")
+            cursor.execute('DELETE FROM player_season_rankings_regular')
+            
+            logger.info("  - Clearing player career totals (playoffs)...")
+            cursor.execute('DELETE FROM player_career_totals_playoffs')
+            
+            logger.info("  - Clearing player career totals (regular)...")
+            cursor.execute('DELETE FROM player_career_totals_regular')
+            
+            logger.info("  - Clearing player season totals (playoffs)...")
+            cursor.execute('DELETE FROM player_season_totals_playoffs')
+            
+            logger.info("  - Clearing player season totals (regular)...")
+            cursor.execute('DELETE FROM player_season_totals_regular')
+            
+            # Delete existing stats in original order
             logger.info("  - Clearing player advanced stats...")
             cursor.execute('DELETE FROM player_advanced_stats')
             
@@ -140,6 +161,51 @@ class NBADataPipeline:
         """Load only advanced stats for a date range (assumes traditional stats already exist)"""
         logger.info(f"📈 Loading advanced stats only from {start_date} to {end_date}")
         self.advanced_extractor.extract_advanced_stats_for_date_range(start_date, end_date)
+    
+    # NEW CAREER STATISTICS METHODS
+    
+    def load_career_stats_all_players(self, max_players: int = None):
+        """Load career statistics for all players in the database"""
+        logger.info("🏆 Loading career statistics for all players...")
+        try:
+            self.career_extractor.extract_career_stats_for_all_players(max_players)
+            logger.info("🎉 Career statistics extraction completed successfully!")
+        except Exception as e:
+            logger.error(f"❌ Career statistics extraction failed: {e}")
+            raise
+    
+    def load_career_stats_active_players(self):
+        """Load career statistics for currently active players only"""
+        logger.info("🏆 Loading career statistics for active players...")
+        try:
+            self.career_extractor.update_career_stats_for_active_players()
+            logger.info("🎉 Active players career statistics updated successfully!")
+        except Exception as e:
+            logger.error(f"❌ Active players career statistics update failed: {e}")
+            raise
+    
+    def load_career_stats_player_list(self, player_ids: list):
+        """Load career statistics for a specific list of players"""
+        logger.info(f"🏆 Loading career statistics for {len(player_ids)} specific players...")
+        try:
+            self.career_extractor.extract_career_stats_for_player_list(player_ids)
+            logger.info("🎉 Player list career statistics extraction completed!")
+        except Exception as e:
+            logger.error(f"❌ Player list career statistics extraction failed: {e}")
+            raise
+    
+    def load_career_stats_single_player(self, player_id: str):
+        """Load career statistics for a single player"""
+        logger.info(f"🏆 Loading career statistics for player {player_id}...")
+        try:
+            success = self.career_extractor.extract_player_career_stats(player_id)
+            if success:
+                logger.info(f"🎉 Career statistics loaded successfully for player {player_id}!")
+            else:
+                logger.error(f"❌ Failed to load career statistics for player {player_id}")
+        except Exception as e:
+            logger.error(f"❌ Career statistics extraction failed for player {player_id}: {e}")
+            raise
 
 def get_db_config() -> Dict[str, str]:
     """Get database configuration"""
@@ -184,12 +250,21 @@ Load Commands (Advanced Stats Only):
   python nba_pipeline.py load-advanced 2025-01-15                    # Load advanced stats only
   python nba_pipeline.py load-advanced 2025-01-15 to 2025-01-22     # Load advanced stats only
 
+Career Statistics Commands:
+  python nba_pipeline.py load-career-all                           # Load career stats for all players
+  python nba_pipeline.py load-career-all --max-players 50          # Load career stats for first 50 players
+  python nba_pipeline.py load-career-active                        # Load career stats for active players only
+  python nba_pipeline.py load-career-player PLAYER_ID              # Load career stats for specific player
+  python nba_pipeline.py load-career-players PLAYER_ID1,PLAYER_ID2 # Load career stats for multiple players
+
 Examples:
   python nba_pipeline.py setup                              # Full setup
   python nba_pipeline.py load 2025-01-19                    # Load all stats for one day
   python nba_pipeline.py load 2025-01-15 to 2025-01-22     # Load all stats for date range
   python nba_pipeline.py load-basic 2025-01-19             # Load only traditional stats
   python nba_pipeline.py load-advanced 2025-01-19          # Load only advanced stats
+  python nba_pipeline.py load-career-active                # Load career stats for active players
+  python nba_pipeline.py load-career-player 2544           # Load career stats for LeBron James
     """)
 
 def main():
@@ -273,6 +348,46 @@ def main():
                 except ValueError as e:
                     print(f"Error: {e}")
                     sys.exit(1)
+        
+        # NEW CAREER STATISTICS COMMANDS
+        elif command == "load-career-all":
+            # Load career stats for all players
+            max_players = None
+            
+            # Check for --max-players flag
+            if len(sys.argv) >= 4 and sys.argv[2] == "--max-players":
+                try:
+                    max_players = int(sys.argv[3])
+                except ValueError:
+                    print("Invalid --max-players value. Must be an integer.")
+                    sys.exit(1)
+            
+            pipeline.load_career_stats_all_players(max_players)
+        
+        elif command == "load-career-active":
+            # Load career stats for active players only
+            pipeline.load_career_stats_active_players()
+        
+        elif command == "load-career-player":
+            # Load career stats for a single player
+            if len(sys.argv) < 3:
+                print("Please provide a player ID")
+                print("Example: python nba_pipeline.py load-career-player 2544")
+                sys.exit(1)
+            
+            player_id = sys.argv[2]
+            pipeline.load_career_stats_single_player(player_id)
+        
+        elif command == "load-career-players":
+            # Load career stats for multiple players
+            if len(sys.argv) < 3:
+                print("Please provide comma-separated player IDs")
+                print("Example: python nba_pipeline.py load-career-players 2544,201939,203076")
+                sys.exit(1)
+            
+            player_ids_str = sys.argv[2]
+            player_ids = [pid.strip() for pid in player_ids_str.split(',')]
+            pipeline.load_career_stats_player_list(player_ids)
         
         else:
             print(f"Unknown command: {command}")
