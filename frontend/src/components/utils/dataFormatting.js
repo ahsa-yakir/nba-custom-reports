@@ -10,6 +10,9 @@ export const formatApiResults = (results, apiResponse) => {
 
   return results.map(item => {
     const baseData = {
+      // Preserve player_id from API response
+      player_id: item.player_id,  // Add this line
+      
       // Always available fields
       name: item.name,
       team: item.team || item.team_code,

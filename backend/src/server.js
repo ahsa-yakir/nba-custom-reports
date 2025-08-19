@@ -35,10 +35,24 @@ app.get('/health', (req, res) => {
 // Import and use routes after middleware setup
 try {
   const reportsRoutes = require('./routes/reports');
+  const careerRoutes = require('./routes/career');  // Added career routes import
+  
   app.use('/api/reports', reportsRoutes);
+  app.use('/api/career', careerRoutes);  // Added career routes registration
+  
   console.log('✅ Routes loaded successfully');
+  console.log('  📊 Reports routes: /api/reports/*');
+  console.log('  🏀 Career routes: /api/career/*');  // Added career routes log
 } catch (error) {
   console.error('❌ Error loading routes:', error.message);
+  
+  // More detailed error logging for debugging
+  if (error.code === 'MODULE_NOT_FOUND') {
+    console.error('💡 Make sure all route files exist:');
+    console.error('   - ./routes/reports.js');
+    console.error('   - ./routes/career.js');  // Added career route file check
+  }
+  
   process.exit(1);
 }
 
@@ -47,7 +61,14 @@ app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
     path: req.originalUrl,
-    method: req.method
+    method: req.method,
+    availableRoutes: [
+      'GET /health',
+      'POST /api/reports/generate',
+      'GET /api/reports/teams',
+      'GET /api/career/player/:playerId',  // Added career endpoints documentation
+      'GET /api/career/search'
+    ]
   });
 });
 
@@ -66,6 +87,7 @@ app.listen(PORT, () => {
   console.log(`🚀 NBA Analytics API server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🏀 Reports API: http://localhost:${PORT}/api/reports`);
+  console.log(`👤 Career API: http://localhost:${PORT}/api/career`);  // Added career API endpoint info
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

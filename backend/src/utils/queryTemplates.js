@@ -1,10 +1,12 @@
 /**
- * Enhanced SQL query templates supporting both legacy and unified approaches
+ * Updated query templates to include player IDs for career modal functionality
+ * This updates the existing queryTemplates.js file
  */
 
 const getPlayerTraditionalQuery = () => {
   return `
     SELECT 
+      p.id as player_id,  -- Added player ID for career modal
       p.name,
       t.team_code as team,
       p.age,
@@ -40,6 +42,7 @@ const getPlayerTraditionalQuery = () => {
 const getPlayerAdvancedQuery = () => {
   return `
     SELECT 
+      p.id as player_id,  -- Added player ID for career modal
       p.name,
       t.team_code as team,
       p.age,
@@ -63,6 +66,66 @@ const getPlayerAdvancedQuery = () => {
     JOIN teams t ON p.team_id = t.id
     JOIN player_advanced_stats pas ON p.id = pas.player_id
     JOIN games g ON pas.game_id = g.id
+    WHERE 1=1
+  `;
+};
+
+const getPlayerUnifiedQuery = () => {
+  return `
+    SELECT 
+      p.id as player_id,  -- Added player ID for career modal
+      p.name,
+      t.team_code as team,
+      p.age,
+      COUNT(DISTINCT pgs.game_id) as games_played,
+      
+      -- Traditional stats (averaged)
+      ROUND(AVG(pgs.minutes_played), 1) as mins,
+      ROUND(AVG(pgs.points), 1) as pts,
+      ROUND(AVG(pgs.field_goals_made), 1) as fgm,
+      ROUND(AVG(pgs.field_goals_attempted), 1) as fga,
+      ROUND(AVG(pgs.field_goal_percentage * 100), 1) as fg_pct,
+      ROUND(AVG(pgs.three_pointers_made), 1) as tpm,
+      ROUND(AVG(pgs.three_pointers_attempted), 1) as tpa,
+      ROUND(AVG(pgs.three_point_percentage * 100), 1) as tp_pct,
+      ROUND(AVG(pgs.free_throws_made), 1) as ftm,
+      ROUND(AVG(pgs.free_throws_attempted), 1) as fta,
+      ROUND(AVG(pgs.free_throw_percentage * 100), 1) as ft_pct,
+      ROUND(AVG(pgs.offensive_rebounds), 1) as oreb,
+      ROUND(AVG(pgs.defensive_rebounds), 1) as dreb,
+      ROUND(AVG(pgs.total_rebounds), 1) as reb,
+      ROUND(AVG(pgs.assists), 1) as ast,
+      ROUND(AVG(pgs.turnovers), 1) as tov,
+      ROUND(AVG(pgs.steals), 1) as stl,
+      ROUND(AVG(pgs.blocks), 1) as blk,
+      ROUND(AVG(pgs.personal_fouls), 1) as pf,
+      ROUND(AVG(pgs.plus_minus), 1) as plus_minus,
+      
+      -- Advanced stats (averaged, may be NULL if not available)
+      ROUND(AVG(pas.offensive_rating), 1) as offensive_rating,
+      ROUND(AVG(pas.defensive_rating), 1) as defensive_rating,
+      ROUND(AVG(pas.net_rating), 1) as net_rating,
+      ROUND(AVG(pas.usage_percentage * 100), 1) as usage_percentage,
+      ROUND(AVG(pas.true_shooting_percentage * 100), 1) as true_shooting_percentage,
+      ROUND(AVG(pas.effective_field_goal_percentage * 100), 1) as effective_field_goal_percentage,
+      ROUND(AVG(pas.assist_percentage * 100), 1) as assist_percentage,
+      ROUND(AVG(pas.assist_turnover_ratio), 2) as assist_turnover_ratio,
+      ROUND(AVG(pas.assist_ratio), 2) as assist_ratio,
+      ROUND(AVG(pas.offensive_rebound_percentage * 100), 1) as offensive_rebound_percentage,
+      ROUND(AVG(pas.defensive_rebound_percentage * 100), 1) as defensive_rebound_percentage,
+      ROUND(AVG(pas.rebound_percentage * 100), 1) as rebound_percentage,
+      ROUND(AVG(pas.turnover_percentage * 100), 1) as turnover_percentage,
+      ROUND(AVG(pas.pie), 3) as pie,
+      ROUND(AVG(pas.pace), 1) as pace,
+      
+      -- Metadata
+      COUNT(DISTINCT CASE WHEN pas.game_id IS NOT NULL THEN pas.game_id END) as advanced_games_available
+      
+    FROM players p
+    JOIN teams t ON p.team_id = t.id
+    JOIN player_game_stats pgs ON p.id = pgs.player_id
+    JOIN games g ON pgs.game_id = g.id
+    LEFT JOIN player_advanced_stats pas ON p.id = pas.player_id AND pgs.game_id = pas.game_id
     WHERE 1=1
   `;
 };
@@ -135,7 +198,7 @@ const getBaseQuery = (measure, isAdvanced = false) => {
 
 const getGroupByClause = (measure, isAdvanced = false) => {
   if (measure === 'Players') {
-    return ` GROUP BY p.id, p.name, t.team_code, p.age`;
+    return ` GROUP BY p.id, p.name, t.team_code, p.age`;  // Updated to include p.id
   } else {
     return ` GROUP BY t.id, t.team_code`;
   }
@@ -176,6 +239,7 @@ const getSelectClause = (measure, isAdvanced = false) => {
   // For building custom select clauses
   if (measure === 'Players') {
     const baseSelect = `
+      p.id as player_id,
       p.name,
       t.team_code as team,
       p.age,
@@ -281,6 +345,7 @@ module.exports = {
   getSelectClause,
   getPlayerTraditionalQuery,
   getPlayerAdvancedQuery,
+  getPlayerUnifiedQuery,
   getTeamTraditionalQuery,
   getTeamAdvancedQuery
 };
