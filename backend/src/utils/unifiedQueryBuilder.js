@@ -40,7 +40,8 @@ const executeQuery = async (sql, params = []) => {
 
 const getPlayerUnifiedQuery = () => {
   return `
-    SELECT 
+    SELECT
+      p.id as player_id, 
       p.name,
       t.team_code as team,
       p.age,
