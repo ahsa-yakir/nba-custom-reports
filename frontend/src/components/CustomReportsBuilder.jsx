@@ -3,7 +3,6 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { BarChart3, Zap, Save, Star, ArrowLeft, FolderOpen, Heart, ChevronRight, ChevronDown, ChevronUp, Minimize2, Maximize2, X, RefreshCw } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { isAdvancedFilterType } from './utils/filterOptions';
 import { detectViewType, shouldAutoSwitchView } from './utils/viewDetection';
 import { formatUnifiedResults, sortData, filterDataByView } from './utils/dataFormatting';
 import ConnectionStatus from './components/ConnectionStatus';
