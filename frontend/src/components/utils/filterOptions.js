@@ -82,13 +82,3 @@ export const getFilterOptions = (measure, teams = []) => {
   }
   return [];
 };
-
-export const isAdvancedFilterType = (filterType) => {
-  const advancedFilterTypes = [
-    'Offensive Rating', 'Defensive Rating', 'Net Rating', 'Usage %', 
-    'True Shooting %', 'Effective FG%', 'Assist %', 'Rebound %', 
-    'Turnover %', 'PIE', 'Pace', 'Assist Turnover Ratio', 
-    'Assist Ratio', 'Offensive Rebound %', 'Defensive Rebound %'
-  ];
-  return advancedFilterTypes.includes(filterType);
-};

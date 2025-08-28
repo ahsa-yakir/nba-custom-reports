@@ -1,19 +1,23 @@
 {
     "name": "nba-analytics-backend",
     "version": "1.0.0",
-    "description": "NBA Analytics Backend API",
+    "description": "NBA Analytics Backend API with Authentication",
     "main": "src/server.js",
     "scripts": {
         "start": "node src/server.js",
         "dev": "nodemon src/server.js",
         "setup-db": "node src/utils/setupDatabase.js",
-        "seed": "node src/utils/seedData.js"
+        "seed": "node src/utils/seedData.js",
+        "migrate": "node src/utils/runMigrations.js"
     },
     "dependencies": {
+        "bcrypt": "^5.1.1",
         "body-parser": "^1.20.3",
         "cors": "^2.8.5",
+        "crypto": "^1.0.1",
         "dotenv": "^16.6.1",
         "express": "^4.21.2",
+        "jsonwebtoken": "^9.0.2",
         "pg": "^8.16.3"
     },
     "devDependencies": {
@@ -23,7 +27,10 @@
         "nba",
         "analytics",
         "api",
-        "postgresql"
+        "postgresql",
+        "authentication",
+        "jwt",
+        "dashboard"
     ],
     "author": "Your Name",
     "license": "MIT"
