@@ -1,5 +1,5 @@
 /**
- * Signup Page Component
+ * Real Signup Page Component with Validation
  */
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';

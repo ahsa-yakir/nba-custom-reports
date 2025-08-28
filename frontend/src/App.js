@@ -1,77 +1,59 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import CustomReportsBuilder from './components/CustomReportsBuilder';
 import './App.css';
 
-// Temporary placeholder components until we create the real ones
-const LoginPage = () => (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-    <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-      <h1 className="text-2xl font-bold text-center mb-6">NBA Analytics Login</h1>
-      <p className="text-gray-600 text-center mb-6">
-        Authentication system coming soon!
-      </p>
-      <div className="space-y-4">
-        <button 
-          onClick={() => window.location.href = '/reports'}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
-        >
-          Continue to Reports (No Login Required)
-        </button>
+// Import real authentication components
+import LoginPage from './components/auth/LoginPage';
+import SignupPage from './components/auth/SignupPage';
+import DashboardPage from './components/dashboard/DashboardPage';
+
+// Protected Route component
+const ProtectedRoute = ({ children }) => {
+  const { user, loading, initialized } = useAuth();
+  
+  if (!initialized || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <a href="/signup" className="text-blue-600 hover:underline">
-            Don't have an account? Sign up
-          </a>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
         </div>
       </div>
-    </div>
-  </div>
-);
+    );
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return children;
+};
 
-const SignupPage = () => (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-    <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-      <h1 className="text-2xl font-bold text-center mb-6">NBA Analytics Signup</h1>
-      <p className="text-gray-600 text-center mb-6">
-        Authentication system coming soon!
-      </p>
-      <div className="space-y-4">
-        <button 
-          onClick={() => window.location.href = '/reports'}
-          className="w-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
-        >
-          Continue to Reports (No Signup Required)
-        </button>
+// Public Route component (redirect to dashboard if already logged in)
+const PublicRoute = ({ children }) => {
+  const { user, loading, initialized } = useAuth();
+  
+  if (!initialized || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <a href="/login" className="text-blue-600 hover:underline">
-            Already have an account? Sign in
-          </a>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
         </div>
       </div>
-    </div>
-  </div>
-);
+    );
+  }
+  
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return children;
+};
 
-const DashboardPage = () => (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-    <div className="max-w-2xl w-full bg-white rounded-lg shadow-md p-8">
-      <h1 className="text-2xl font-bold text-center mb-6">NBA Analytics Dashboard</h1>
-      <p className="text-gray-600 text-center mb-6">
-        Dashboard features coming soon!
-      </p>
-      <div className="text-center">
-        <button 
-          onClick={() => window.location.href = '/reports'}
-          className="bg-blue-600 text-white py-2 px-6 rounded hover:bg-blue-700"
-        >
-          Go to Reports Builder
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
-// Simple landing page component
+// Landing page component
 const LandingPage = () => (
   <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
     <div className="max-w-2xl w-full text-center px-4">
@@ -101,7 +83,7 @@ const LandingPage = () => (
             onClick={() => window.location.href = '/login'}
             className="bg-gray-600 text-white py-3 px-6 rounded-lg hover:bg-gray-700 transition-colors"
           >
-            🔐 Login (Coming Soon)
+            🔐 Login / Sign Up
           </button>
         </div>
 
@@ -134,28 +116,82 @@ const LandingPage = () => (
   </div>
 );
 
+// Smart redirect component
+const SmartRedirect = () => {
+  const { user, loading, initialized } = useAuth();
+  
+  if (!initialized || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading NBA Analytics...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // If user is authenticated, go to dashboard
+  // If not, show landing page
+  return user ? <Navigate to="/dashboard" replace /> : <LandingPage />;
+};
+
 // Main App component
 function App() {
   return (
-    <Router>
-      <div className="App">
-        <Routes>
-          {/* Landing page */}
-          <Route path="/" element={<LandingPage />} />
-          
-          {/* Authentication pages (placeholders) */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          
-          {/* Your existing reports app */}
-          <Route path="/reports" element={<CustomReportsBuilder />} />
-          
-          {/* Catch-all route */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </div>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <div className="App">
+          <Routes>
+            {/* Root route - smart redirect or landing page */}
+            <Route path="/" element={<SmartRedirect />} />
+            
+            {/* Authentication pages */}
+            <Route 
+              path="/login" 
+              element={
+                <PublicRoute>
+                  <LoginPage />
+                </PublicRoute>
+              } 
+            />
+            <Route 
+              path="/signup" 
+              element={
+                <PublicRoute>
+                  <SignupPage />
+                </PublicRoute>
+              } 
+            />
+            
+            {/* Your existing reports app - accessible to all */}
+            <Route path="/reports" element={<CustomReportsBuilder />} />
+            
+            {/* Protected routes */}
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              } 
+            />
+            
+            <Route 
+              path="/dashboard/:dashboardId" 
+              element={
+                <ProtectedRoute>
+                  <CustomReportsBuilder />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Catch-all route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </Router>
+    </AuthProvider>
   );
 }
 

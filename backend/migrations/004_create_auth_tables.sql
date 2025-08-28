@@ -1,5 +1,5 @@
--- 003_create_auth_tables.sql
--- NBA Database - Authentication and Dashboard Tables
+-- 003_create_auth_tables_fixed.sql
+-- NBA Database - Authentication and Dashboard Tables (Fixed Version)
 -- Run this after 002_create_indexes.sql to add user management functionality
 
 BEGIN;
@@ -270,16 +270,16 @@ WHERE sr.last_viewed_at IS NOT NULL
 ORDER BY sr.last_viewed_at DESC;
 
 -- =====================================================
--- SAMPLE DATA (FOR DEVELOPMENT)
+-- SAMPLE DATA (FOR DEVELOPMENT) - FIXED
 -- =====================================================
 
--- Insert a sample user (password is 'password123' hashed with bcrypt)
+-- Insert sample users (password is 'password123' hashed with bcrypt)
 -- Note: In production, this should be removed or use proper seeding scripts
 INSERT INTO users (username, email, password_hash, first_name, last_name) VALUES
 ('demo_user', 'demo@nbaanalytics.com', '$2b$10$rOxcx5YiOeZjD8bEF8Qz4.TGGb8ZVJ6mJ1qQ8j5YKVMxUGvfVl8T2', 'Demo', 'User'),
 ('admin_user', 'admin@nbaanalytics.com', '$2b$10$rOxcx5YiOeZjD8bEF8Qz4.TGGb8ZVJ6mJ1qQ8j5YKVMxUGvfVl8T2', 'Admin', 'User');
 
--- Create sample dashboards
+-- Create sample dashboards - FIXED: Use correct column order
 INSERT INTO dashboards (user_id, name, description, is_default) 
 SELECT 
     u.id,
@@ -292,8 +292,7 @@ INSERT INTO dashboards (user_id, name, description)
 SELECT 
     u.id,
     'Advanced Analytics',
-    'Dashboard focused on advanced NBA statistics',
-    false
+    'Dashboard focused on advanced NBA statistics'
 FROM users u WHERE u.username = 'demo_user';
 
 -- =====================================================

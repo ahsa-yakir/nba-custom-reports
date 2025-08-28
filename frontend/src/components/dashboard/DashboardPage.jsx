@@ -14,7 +14,9 @@ import {
   Folder,
   LogOut,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  Edit2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -27,7 +29,9 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreateDashboard, setShowCreateDashboard] = useState(false);
+  const [editingDashboard, setEditingDashboard] = useState(null);
   const [newDashboardName, setNewDashboardName] = useState('');
+  const [newDashboardDescription, setNewDashboardDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
@@ -40,8 +44,8 @@ const DashboardPage = () => {
       setError('');
 
       const [dashboardsResponse, recentReportsResponse] = await Promise.all([
-        authService.getDashboards(),
-        authService.getRecentReports(5)
+        authService.apiRequest('/dashboards'),
+        authService.apiRequest('/saved-reports/recent?limit=5')
       ]);
 
       if (dashboardsResponse.success) {
@@ -54,7 +58,7 @@ const DashboardPage = () => {
 
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
-      setError('Failed to load dashboard data');
+      setError('Failed to load dashboard data: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -65,21 +69,79 @@ const DashboardPage = () => {
 
     try {
       setIsCreating(true);
-      const response = await authService.createDashboard({
-        name: newDashboardName.trim(),
-        description: `Custom dashboard for ${newDashboardName}`
+      const response = await authService.apiRequest('/dashboards', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: newDashboardName.trim(),
+          description: newDashboardDescription.trim() || null
+        })
       });
 
       if (response.success) {
-        setDashboards([...dashboards, response.dashboard]);
+        // Ensure the new dashboard has proper stats structure
+        const newDashboard = {
+          ...response.dashboard,
+          stats: {
+            reportCount: 0,
+            favoriteCount: 0,
+            lastActivity: null
+          }
+        };
+        
+        setDashboards([...dashboards, newDashboard]);
         setNewDashboardName('');
+        setNewDashboardDescription('');
         setShowCreateDashboard(false);
       }
     } catch (error) {
       console.error('Failed to create dashboard:', error);
-      setError('Failed to create dashboard');
+      setError('Failed to create dashboard: ' + error.message);
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleEditDashboard = async (dashboardId, updates) => {
+    try {
+      const response = await authService.apiRequest(`/dashboards/${dashboardId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates)
+      });
+
+      if (response.success) {
+        setDashboards(dashboards.map(d => 
+          d.id === dashboardId ? { 
+            ...d, 
+            ...response.dashboard,
+            stats: d.stats || { reportCount: 0, favoriteCount: 0, lastActivity: null }
+          } : d
+        ));
+        setEditingDashboard(null);
+        setNewDashboardName('');
+        setNewDashboardDescription('');
+      }
+    } catch (error) {
+      console.error('Failed to update dashboard:', error);
+      setError('Failed to update dashboard: ' + error.message);
+    }
+  };
+
+  const handleDeleteDashboard = async (dashboardId) => {
+    if (!window.confirm('Are you sure you want to delete this dashboard? All saved reports will be lost.')) {
+      return;
+    }
+
+    try {
+      const response = await authService.apiRequest(`/dashboards/${dashboardId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.success) {
+        setDashboards(dashboards.filter(d => d.id !== dashboardId));
+      }
+    } catch (error) {
+      console.error('Failed to delete dashboard:', error);
+      setError('Failed to delete dashboard: ' + error.message);
     }
   };
 
@@ -155,6 +217,12 @@ const DashboardPage = () => {
             <div className="flex items-center">
               <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
               <p className="text-sm text-red-700">{error}</p>
+              <button 
+                onClick={() => setError('')}
+                className="ml-auto text-red-400 hover:text-red-600"
+              >
+                ×
+              </button>
             </div>
           </div>
         )}
@@ -176,7 +244,7 @@ const DashboardPage = () => {
                 {getDefaultDashboard().name}
               </p>
               <div className="mt-4 text-xs text-blue-200">
-                {getDefaultDashboard().stats.reportCount} reports saved
+                {getDefaultDashboard().stats?.reportCount || 0} reports saved
               </div>
             </div>
           )}
@@ -254,11 +322,13 @@ const DashboardPage = () => {
                     {dashboards.map((dashboard) => (
                       <div
                         key={dashboard.id}
-                        onClick={() => handleEnterDashboard(dashboard)}
-                        className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all"
+                        className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all"
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex-1">
+                          <div 
+                            className="flex-1 cursor-pointer"
+                            onClick={() => handleEnterDashboard(dashboard)}
+                          >
                             <div className="flex items-center space-x-3">
                               <h3 className="text-lg font-medium text-gray-900">
                                 {dashboard.name}
@@ -276,25 +346,40 @@ const DashboardPage = () => {
                               </p>
                             )}
                             <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                              <span>{dashboard.stats.reportCount} reports</span>
-                              <span>{dashboard.stats.favoriteCount} favorites</span>
-                              {dashboard.stats.lastActivity && (
+                              <span>{dashboard.stats?.reportCount || 0} reports</span>
+                              <span>{dashboard.stats?.favoriteCount || 0} favorites</span>
+                              {dashboard.stats?.lastActivity && (
                                 <span>
                                   Last used {new Date(dashboard.stats.lastActivity).toLocaleDateString()}
                                 </span>
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-2 ml-4">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // Handle dashboard settings
+                                setEditingDashboard(dashboard);
+                                setNewDashboardName(dashboard.name);
+                                setNewDashboardDescription(dashboard.description || '');
                               }}
-                              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                              className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-100"
+                              title="Edit dashboard"
                             >
-                              <Settings className="w-4 h-4" />
+                              <Edit2 className="w-4 h-4" />
                             </button>
+                            {dashboards.length > 1 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteDashboard(dashboard.id);
+                                }}
+                                className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-100"
+                                title="Delete dashboard"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                             <ChevronRight className="w-5 h-5 text-gray-400" />
                           </div>
                         </div>
@@ -306,8 +391,9 @@ const DashboardPage = () => {
             </div>
           </div>
 
-          {/* Recent Reports Section */}
-          <div className="lg:col-span-1">
+          {/* Sidebar */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* Recent Reports */}
             <div className="bg-white rounded-lg shadow-sm border">
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center space-x-3">
@@ -327,7 +413,6 @@ const DashboardPage = () => {
                     {recentReports.map((report) => (
                       <div
                         key={report.id}
-                        onClick={() => navigate(`/saved-report/${report.id}`)}
                         className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all"
                       >
                         <div className="flex items-start justify-between">
@@ -359,7 +444,7 @@ const DashboardPage = () => {
             </div>
 
             {/* User Stats */}
-            <div className="bg-white rounded-lg shadow-sm border mt-6">
+            <div className="bg-white rounded-lg shadow-sm border">
               <div className="p-6">
                 <div className="flex items-center space-x-3 mb-4">
                   <Users className="w-5 h-5 text-gray-600" />
@@ -369,11 +454,13 @@ const DashboardPage = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Dashboards</span>
-                    <span className="font-medium">{user?.stats?.dashboardCount || 0}</span>
+                    <span className="font-medium">{dashboards.length}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Reports</span>
-                    <span className="font-medium">{user?.stats?.reportCount || 0}</span>
+                    <span className="font-medium">
+                      {dashboards.reduce((sum, d) => sum + (d.stats?.reportCount || 0), 0)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Member Since</span>
@@ -387,32 +474,52 @@ const DashboardPage = () => {
           </div>
         </div>
 
-        {/* Create Dashboard Modal */}
-        {showCreateDashboard && (
+        {/* Create/Edit Dashboard Modal */}
+        {(showCreateDashboard || editingDashboard) && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Dashboard</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                {editingDashboard ? 'Edit Dashboard' : 'Create New Dashboard'}
+              </h3>
               
-              <div className="mb-4">
-                <label htmlFor="dashboardName" className="block text-sm font-medium text-gray-700 mb-2">
-                  Dashboard Name
-                </label>
-                <input
-                  id="dashboardName"
-                  type="text"
-                  value={newDashboardName}
-                  onChange={(e) => setNewDashboardName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter dashboard name"
-                  maxLength={255}
-                />
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="dashboardName" className="block text-sm font-medium text-gray-700 mb-2">
+                    Dashboard Name
+                  </label>
+                  <input
+                    id="dashboardName"
+                    type="text"
+                    value={newDashboardName}
+                    onChange={(e) => setNewDashboardName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter dashboard name"
+                    maxLength={255}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="dashboardDescription" className="block text-sm font-medium text-gray-700 mb-2">
+                    Description (optional)
+                  </label>
+                  <textarea
+                    id="dashboardDescription"
+                    value={newDashboardDescription}
+                    onChange={(e) => setNewDashboardDescription(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter description"
+                    rows={3}
+                  />
+                </div>
               </div>
 
-              <div className="flex space-x-3">
+              <div className="flex space-x-3 mt-6">
                 <button
                   onClick={() => {
                     setShowCreateDashboard(false);
+                    setEditingDashboard(null);
                     setNewDashboardName('');
+                    setNewDashboardDescription('');
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   disabled={isCreating}
@@ -420,17 +527,26 @@ const DashboardPage = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={handleCreateDashboard}
+                  onClick={() => {
+                    if (editingDashboard) {
+                      handleEditDashboard(editingDashboard.id, {
+                        name: newDashboardName.trim(),
+                        description: newDashboardDescription.trim() || null
+                      });
+                    } else {
+                      handleCreateDashboard();
+                    }
+                  }}
                   disabled={!newDashboardName.trim() || isCreating}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {isCreating ? (
                     <div className="flex items-center justify-center">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Creating...
+                      {editingDashboard ? 'Updating...' : 'Creating...'}
                     </div>
                   ) : (
-                    'Create Dashboard'
+                    editingDashboard ? 'Update Dashboard' : 'Create Dashboard'
                   )}
                 </button>
               </div>
