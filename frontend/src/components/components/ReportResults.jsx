@@ -18,7 +18,10 @@ const ReportResults = ({
   needsNewFetch,
   onViewTypeChange, 
   onSortChange,
-  onFiltersChange
+  onFiltersChange,
+  // Add these props for save functionality
+  canSave = false,
+  onSaveReport
 }) => {
   // Get columns for current view
   const columns = useMemo(() => {
@@ -79,6 +82,12 @@ const ReportResults = ({
     URL.revokeObjectURL(url);
   };
 
+  const handleSaveClick = () => {
+    if (onSaveReport && canSave) {
+      onSaveReport();
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
       {/* Header with title and actions */}
@@ -94,16 +103,20 @@ const ReportResults = ({
         </div>
         
         <div className="flex space-x-2">
-          <button 
-            className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300"
-            disabled={results.length === 0}
-          >
-            <Save className="w-4 h-4" />
-            <span>Save Report</span>
-          </button>
+          {/* Only show save button if canSave is true and onSaveReport is provided */}
+          {canSave && onSaveReport && (
+            <button 
+              onClick={handleSaveClick}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-300 transition-colors"
+              disabled={results.length === 0}
+            >
+              <Save className="w-4 h-4" />
+              <span>Save Report</span>
+            </button>
+          )}
           <button 
             onClick={handleExport}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300"
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 transition-colors"
             disabled={results.length === 0}
           >
             <Download className="w-4 h-4" />

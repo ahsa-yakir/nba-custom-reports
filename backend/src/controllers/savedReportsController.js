@@ -433,8 +433,8 @@ const updateSavedReport = async (req, res) => {
       }
     }
 
-    // Clear cache if filters or config changed
-    const clearCache = filters || sortConfig || viewType;
+    // Clear cache if filters or config changed - FIXED: ensure boolean
+    const clearCache = !!(filters || sortConfig || viewType);
 
     // Update report
     const updatedReport = await query(`
@@ -457,7 +457,7 @@ const updateSavedReport = async (req, res) => {
       filters ? JSON.stringify(filters) : null,
       sortConfig ? JSON.stringify(sortConfig) : null,
       viewType,
-      clearCache,
+      clearCache, // Now guaranteed to be boolean
       reportId,
       userId
     ]);

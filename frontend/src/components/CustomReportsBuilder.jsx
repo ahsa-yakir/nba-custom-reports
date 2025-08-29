@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, Zap, Save, Star, ArrowLeft, FolderOpen, Heart, ChevronRight, ChevronDown, ChevronUp, Minimize2, Maximize2, X, RefreshCw } from 'lucide-react';
+import { BarChart3, Zap, Star, ArrowLeft, FolderOpen, Heart, ChevronRight, ChevronDown, Minimize2, Maximize2, X, RefreshCw, Edit3 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { detectViewType, shouldAutoSwitchView } from './utils/viewDetection';
@@ -63,6 +63,13 @@ const CustomReportsBuilder = () => {
   const [expandedReports, setExpandedReports] = useState(new Map());
   const [loadingReports, setLoadingReports] = useState(new Set());
 
+  // Edit functionality state
+  const [editState, setEditState] = useState({
+    editingReportId: null,
+    isEditing: false,
+    originalReportState: null
+  });
+
   // Smart view detection with auto-switching
   const detectedViewType = useMemo(() => {
     return detectViewType(reportState.filters, dataCache.apiResponse);
@@ -81,12 +88,28 @@ const CustomReportsBuilder = () => {
     return sortData(viewFilteredData, reportState.sortConfig);
   }, [dataCache.formattedData, reportState.viewType, reportState.measure, reportState.sortConfig]);
 
+  const loadSavedReports = useCallback(async () => {
+    if (!isInDashboard) return;
+
+    try {
+      const response = await authService.apiRequest(`/dashboards/${dashboardId}/reports`);
+      if (response.success) {
+        setSaveState(prev => ({ 
+          ...prev, 
+          savedReports: response.reports 
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load saved reports:', error);
+    }
+  }, [isInDashboard, dashboardId, authService]);
+
   // Load saved reports if in dashboard context
   useEffect(() => {
     if (isInDashboard) {
       loadSavedReports();
     }
-  }, [dashboardId, isInDashboard]);
+  }, [isInDashboard, loadSavedReports]);
 
   // Auto-switch view type when filters change
   useEffect(() => {
@@ -109,7 +132,7 @@ const CustomReportsBuilder = () => {
         }, 2000);
       }
     }
-  }, [reportState.filters, detectedViewType, reportState.lastViewType, dataCache.apiResponse]);
+  }, [reportState.filters, reportState.viewType, detectedViewType, reportState.lastViewType, dataCache.apiResponse]);
 
   // Check if current config needs new data fetch
   const needsNewFetch = useMemo(() => {
@@ -123,7 +146,7 @@ const CustomReportsBuilder = () => {
       JSON.stringify(filters) !== JSON.stringify(lastConfig.filters) ||
       dataCache.isStale
     );
-  }, [reportState.measure, reportState.filters, dataCache.lastFetchConfig, dataCache.isStale]);
+  }, [reportState, dataCache.lastFetchConfig, dataCache.isStale]);
 
   // Initialize connection and teams
   useEffect(() => {
@@ -173,22 +196,6 @@ const CustomReportsBuilder = () => {
         ...prev, 
         teams: ['BOS', 'MIL', 'PHI', 'LAL', 'GSW', 'DAL', 'DEN', 'OKC'] 
       }));
-    }
-  };
-
-  const loadSavedReports = async () => {
-    if (!isInDashboard) return;
-
-    try {
-      const response = await authService.apiRequest(`/dashboards/${dashboardId}/reports`);
-      if (response.success) {
-        setSaveState(prev => ({ 
-          ...prev, 
-          savedReports: response.reports 
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to load saved reports:', error);
     }
   };
 
@@ -276,13 +283,13 @@ const CustomReportsBuilder = () => {
         viewType: reportState.viewType
       };
 
+      // Create new report
       const response = await authService.apiRequest(`/dashboards/${dashboardId}/reports`, {
         method: 'POST',
         body: JSON.stringify(reportData)
       });
 
       if (response.success) {
-        // Add the new report to our local state
         const newReport = {
           id: response.report.id,
           name: response.report.name,
@@ -292,7 +299,10 @@ const CustomReportsBuilder = () => {
           isFavorite: false,
           viewCount: 0,
           createdAt: response.report.createdAt,
-          hasCachedData: response.report.hasCachedData
+          hasCachedData: response.report.hasCachedData,
+          // Add filters for edit functionality
+          filters: reportState.filters,
+          sortConfig: reportState.sortConfig
         };
 
         setSaveState(prev => ({ 
@@ -390,36 +400,196 @@ const CustomReportsBuilder = () => {
     setExpandedReports(newExpandedReports);
   };
 
-  const handleRefreshExpandedReport = async (reportId) => {
-    const expandedReport = expandedReports.get(reportId);
-    if (!expandedReport) return;
+  const handleEditSavedReport = async (report) => {
+    try {
+      // Store original state so we can restore if user cancels
+      setEditState({
+        editingReportId: report.id,
+        isEditing: true,
+        originalReportState: { ...reportState }
+      });
 
+      // Load the report configuration into the main builder
+      setReportState({
+        measure: report.measure,
+        filters: report.filters,
+        sortConfig: report.sortConfig,
+        viewType: report.viewType,
+        lastViewType: report.viewType
+      });
+
+      // Try to load cached data if available
+      const response = await authService.apiRequest(`/saved-reports/${report.id}`);
+      if (response.success && response.data) {
+        const formattedData = formatUnifiedResults(
+          response.data,
+          report.viewType,
+          response.metadata
+        );
+
+        setDataCache({
+          rawResults: response.data,
+          formattedData,
+          apiResponse: response.metadata,
+          lastFetchConfig: {
+            measure: report.measure,
+            filters: report.filters
+          },
+          isStale: false
+        });
+      } else {
+        // Mark data as stale so user knows to regenerate
+        setDataCache(prev => ({ ...prev, isStale: true }));
+      }
+
+      console.log('Editing report:', report.name);
+    } catch (error) {
+      console.error('Failed to load report for editing:', error);
+      setUiState(prev => ({ 
+        ...prev, 
+        apiError: 'Failed to load report for editing: ' + error.message 
+      }));
+    }
+  };
+
+  const handleSaveEditedReport = async () => {
+    if (!editState.editingReportId) return;
+
+    setSaveState(prev => ({ ...prev, isSaving: true }));
+
+    try {
+      const reportData = {
+        name: saveState.saveName.trim(),
+        description: saveState.saveDescription.trim() || null,
+        measure: reportState.measure,
+        filters: reportState.filters,
+        sortConfig: reportState.sortConfig,
+        viewType: reportState.viewType
+      };
+
+      const response = await authService.apiRequest(`/saved-reports/${editState.editingReportId}`, {
+        method: 'PUT',
+        body: JSON.stringify(reportData)
+      });
+
+      if (response.success) {
+        // Update the saved reports list
+        setSaveState(prev => ({
+          ...prev,
+          savedReports: prev.savedReports.map(r => 
+            r.id === editState.editingReportId 
+              ? {
+                  ...r, 
+                  name: response.report.name,
+                  description: response.report.description,
+                  measure: response.report.measure,
+                  viewType: response.report.viewType
+                }
+              : r
+          ),
+          showSaveModal: false,
+          saveName: '',
+          saveDescription: ''
+        }));
+
+        // Update expanded reports if this report is currently expanded
+        if (expandedReports.has(editState.editingReportId)) {
+          const newExpandedReports = new Map(expandedReports);
+          const expandedReport = newExpandedReports.get(editState.editingReportId);
+          newExpandedReports.set(editState.editingReportId, {
+            ...expandedReport,
+            name: response.report.name,
+            description: response.report.description,
+            measure: response.report.measure,
+            filters: reportState.filters,
+            sortConfig: reportState.sortConfig,
+            viewType: reportState.viewType
+          });
+          setExpandedReports(newExpandedReports);
+        }
+
+        // Clear edit state
+        setEditState({
+          editingReportId: null,
+          isEditing: false,
+          originalReportState: null
+        });
+
+        console.log('Report updated successfully:', response.report.name);
+      }
+    } catch (error) {
+      console.error('Failed to update report:', error);
+      setUiState(prev => ({ 
+        ...prev, 
+        apiError: 'Failed to update report: ' + error.message 
+      }));
+    } finally {
+      setSaveState(prev => ({ ...prev, isSaving: false }));
+    }
+  };
+
+  const handleCancelEdit = () => {
+    if (editState.originalReportState) {
+      // Restore original state
+      setReportState(editState.originalReportState);
+      setDataCache(prev => ({ ...prev, isStale: true }));
+    }
+
+    // Clear edit state
+    setEditState({
+      editingReportId: null,
+      isEditing: false,
+      originalReportState: null
+    });
+
+    console.log('Edit cancelled, restored original state');
+  };
+
+  const handleRefreshExpandedReport = async (reportId) => {
     const newLoadingReports = new Set(loadingReports);
     newLoadingReports.add(reportId);
     setLoadingReports(newLoadingReports);
 
     try {
-      const response = await authService.apiRequest(`/saved-reports/${reportId}?regenerate=true`);
+      const expandedReport = expandedReports.get(reportId);
+      if (!expandedReport) return;
 
-      if (response.success && response.data) {
+      // Generate fresh data using the report's configuration
+      const reportConfig = {
+        measure: expandedReport.measure,
+        filters: expandedReport.filters.map(filter => ({
+          type: filter.type,
+          operator: filter.operator,
+          value: filter.value,
+          value2: filter.value2,
+          values: filter.values
+        })),
+        sortConfig: expandedReport.sortConfig,
+        viewType: 'unified'
+      };
+
+      const response = await apiService.generateReport(reportConfig);
+      
+      if (response.success && response.results) {
         const formattedData = formatUnifiedResults(
-          response.data,
+          response.results,
           expandedReport.viewType,
-          response.metadata
+          response
         );
 
+        // Update the expanded report with fresh data
         const newExpandedReports = new Map(expandedReports);
         newExpandedReports.set(reportId, {
           ...expandedReport,
           data: formattedData,
-          rawData: response.data,
-          metadata: response.metadata,
+          rawData: response.results,
+          metadata: response,
           lastLoaded: new Date().toISOString(),
           hasCache: true
         });
-
         setExpandedReports(newExpandedReports);
-        console.log('Refreshed report:', expandedReport.name);
+
+        console.log('Refreshed report data:', expandedReport.name);
       }
     } catch (error) {
       console.error('Failed to refresh report:', error);
@@ -524,17 +694,6 @@ const CustomReportsBuilder = () => {
                   <span>Back to Dashboards</span>
                 </button>
               )}
-
-              {/* Save Report button */}
-              {canSaveReport && (
-                <button
-                  onClick={() => setSaveState(prev => ({ ...prev, showSaveModal: true }))}
-                  className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Save Report</span>
-                </button>
-              )}
               
               <ConnectionStatus 
                 status={uiState.connectionStatus}
@@ -570,20 +729,40 @@ const CustomReportsBuilder = () => {
                 {saveState.savedReports.map((report) => {
                   const isExpanded = expandedReports.has(report.id);
                   const isLoading = loadingReports.has(report.id);
+                  const isCurrentlyEditing = editState.editingReportId === report.id;
                   
                   return (
                     <div
                       key={report.id}
-                      className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                        isExpanded 
-                          ? 'border-blue-500 bg-blue-50 shadow-md' 
-                          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                      className={`group relative p-4 border rounded-lg cursor-pointer transition-all ${
+                        isCurrentlyEditing
+                          ? 'border-orange-500 bg-orange-50 shadow-md'
+                          : isExpanded 
+                            ? 'border-blue-500 bg-blue-50 shadow-md' 
+                            : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
                       }`}
-                      onClick={() => !isLoading && handleLoadSavedReport(report.id, report.name)}
+                      onClick={() => !isLoading && !isCurrentlyEditing && handleLoadSavedReport(report.id, report.name)}
                     >
-                      <div className="flex items-start justify-between mb-2">
+                      {/* Edit button - appears on hover */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditSavedReport(report);
+                          setSaveState(prev => ({
+                            ...prev,
+                            saveName: report.name,
+                            saveDescription: report.description || ''
+                          }));
+                        }}
+                        className="absolute top-2 right-2 p-1.5 bg-white border border-gray-300 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-gray-50 z-10"
+                        title="Edit report"
+                      >
+                        <Edit3 className="w-3 h-3 text-gray-600" />
+                      </button>
+
+                      <div className="flex items-start justify-between mb-2 pr-8">
                         <h4 className="font-medium text-gray-900 truncate">{report.name}</h4>
-                        <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
+                        <div className="flex items-center space-x-1 flex-shrink-0">
                           {isLoading && (
                             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
                           )}
@@ -592,6 +771,9 @@ const CustomReportsBuilder = () => {
                           )}
                           {isExpanded && (
                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          )}
+                          {isCurrentlyEditing && (
+                            <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                           )}
                         </div>
                       </div>
@@ -612,6 +794,12 @@ const CustomReportsBuilder = () => {
                       {isExpanded && (
                         <div className="mt-2 text-xs text-blue-600 font-medium">
                           ✓ Expanded below
+                        </div>
+                      )}
+                      
+                      {isCurrentlyEditing && (
+                        <div className="mt-2 text-xs text-orange-600 font-medium">
+                          ✏️ Currently editing
                         </div>
                       )}
                     </div>
@@ -664,7 +852,7 @@ const CustomReportsBuilder = () => {
                                   </span>
                                   {report.hasCache && (
                                     <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
-                                      ⚡ Cached
+                                      Cached
                                     </span>
                                   )}
                                 </div>
@@ -814,6 +1002,8 @@ const CustomReportsBuilder = () => {
             onViewTypeChange={handleViewChange}
             onSortChange={handleSortChange}
             onFiltersChange={handleFiltersChange}
+            canSave={canSaveReport}
+            onSaveReport={() => setSaveState(prev => ({ ...prev, showSaveModal: true }))}
           />
         </div>
       </div>
@@ -822,7 +1012,20 @@ const CustomReportsBuilder = () => {
       {saveState.showSaveModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Save Report</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {editState.isEditing ? 'Edit Report' : 'Save Report'}
+              </h3>
+              {editState.isEditing && (
+                <button
+                  onClick={handleCancelEdit}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Cancel editing"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
             
             <div className="space-y-4">
               <div>
@@ -855,7 +1058,9 @@ const CustomReportsBuilder = () => {
               </div>
 
               <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-sm text-gray-600 mb-2">Report Summary:</p>
+                <p className="text-sm text-gray-600 mb-2">
+                  {editState.isEditing ? 'Updated Report Summary:' : 'Report Summary:'}
+                </p>
                 <ul className="text-xs text-gray-500 space-y-1">
                   <li>• Measure: {reportState.measure}</li>
                   <li>• Filters: {reportState.filters.length}</li>
@@ -863,33 +1068,53 @@ const CustomReportsBuilder = () => {
                   <li>• Results: {displayData.length} rows</li>
                 </ul>
               </div>
+
+              {editState.isEditing && (
+                <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg">
+                  <p className="text-sm text-orange-800">
+                    <strong>Note:</strong> Changes will update the saved report configuration. 
+                    Data will be refreshed when the report is next viewed.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex space-x-3 mt-6">
               <button
-                onClick={() => setSaveState(prev => ({ 
-                  ...prev, 
-                  showSaveModal: false, 
-                  saveName: '', 
-                  saveDescription: '' 
-                }))}
+                onClick={() => {
+                  if (editState.isEditing) {
+                    handleCancelEdit();
+                  }
+                  setSaveState(prev => ({ 
+                    ...prev, 
+                    showSaveModal: false, 
+                    saveName: '', 
+                    saveDescription: '' 
+                  }));
+                }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                 disabled={saveState.isSaving}
               >
                 Cancel
               </button>
               <button
-                onClick={handleSaveReport}
+                onClick={() => {
+                  if (editState.isEditing) {
+                    handleSaveEditedReport();
+                  } else {
+                    handleSaveReport();
+                  }
+                }}
                 disabled={!saveState.saveName.trim() || saveState.isSaving}
                 className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {saveState.isSaving ? (
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
+                    {editState.isEditing ? 'Updating...' : 'Saving...'}
                   </div>
                 ) : (
-                  'Save Report'
+                  editState.isEditing ? 'Update Report' : 'Save Report'
                 )}
               </button>
             </div>
