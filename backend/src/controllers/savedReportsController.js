@@ -498,7 +498,7 @@ const deleteSavedReport = async (req, res) => {
 
     // Check if report exists and user owns it
     const existingReport = await query(`
-      SELECT sr.id, sr.name
+      SELECT sr.id, sr.name, sr.dashboard_id
       FROM saved_reports sr
       JOIN dashboards d ON sr.dashboard_id = d.id
       WHERE sr.id = $1 AND sr.user_id = $2
@@ -511,8 +511,8 @@ const deleteSavedReport = async (req, res) => {
       });
     }
 
-    // Delete report
-    await query('DELETE FROM saved_reports WHERE id = $1', [reportId]);
+    // Delete the report
+    await query('DELETE FROM saved_reports WHERE id = $1 AND user_id = $2', [reportId, userId]);
 
     console.log(`Report deleted: ${existingReport.rows[0].name} by user ${req.user.username}`);
 

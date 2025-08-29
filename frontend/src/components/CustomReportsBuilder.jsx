@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, Zap, Star, ArrowLeft, FolderOpen, Heart, ChevronRight, ChevronDown, Minimize2, Maximize2, X, RefreshCw, Edit3 } from 'lucide-react';
+import { BarChart3, Zap, Star, ArrowLeft, FolderOpen, Heart, ChevronRight, ChevronDown, Minimize2, Maximize2, X, RefreshCw, Edit3, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { detectViewType, shouldAutoSwitchView } from './utils/viewDetection';
@@ -56,7 +56,11 @@ const CustomReportsBuilder = () => {
     saveName: '',
     saveDescription: '',
     isSaving: false,
-    savedReports: []
+    savedReports: [],
+    showDeleteModal: false,
+    deletingReportId: null,
+    deletingReportName: '',
+    isDeleting: false
   });
 
   // Multiple expanded reports state
@@ -104,6 +108,20 @@ const CustomReportsBuilder = () => {
     }
   }, [isInDashboard, dashboardId, authService]);
 
+  // Check if current config needs new data fetch
+  const needsNewFetch = useMemo(() => {
+    if (!dataCache.lastFetchConfig) return true;
+    
+    const { measure, filters } = reportState;
+    const lastConfig = dataCache.lastFetchConfig;
+    
+    return (
+      measure !== lastConfig.measure ||
+      JSON.stringify(filters) !== JSON.stringify(lastConfig.filters) ||
+      dataCache.isStale
+    );
+  }, [reportState, dataCache.lastFetchConfig, dataCache.isStale]);
+
   // Load saved reports if in dashboard context
   useEffect(() => {
     if (isInDashboard) {
@@ -133,20 +151,6 @@ const CustomReportsBuilder = () => {
       }
     }
   }, [reportState.filters, reportState.viewType, detectedViewType, reportState.lastViewType, dataCache.apiResponse]);
-
-  // Check if current config needs new data fetch
-  const needsNewFetch = useMemo(() => {
-    if (!dataCache.lastFetchConfig) return true;
-    
-    const { measure, filters } = reportState;
-    const lastConfig = dataCache.lastFetchConfig;
-    
-    return (
-      measure !== lastConfig.measure ||
-      JSON.stringify(filters) !== JSON.stringify(lastConfig.filters) ||
-      dataCache.isStale
-    );
-  }, [reportState, dataCache.lastFetchConfig, dataCache.isStale]);
 
   // Initialize connection and teams
   useEffect(() => {
@@ -603,6 +607,77 @@ const CustomReportsBuilder = () => {
     }
   };
 
+  const handleDeleteSavedReport = (report) => {
+    setSaveState(prev => ({
+      ...prev,
+      showDeleteModal: true,
+      deletingReportId: report.id,
+      deletingReportName: report.name
+    }));
+  };
+
+  const confirmDeleteReport = async () => {
+    if (!saveState.deletingReportId) return;
+
+    setSaveState(prev => ({ ...prev, isDeleting: true }));
+
+    try {
+      const response = await authService.apiRequest(`/saved-reports/${saveState.deletingReportId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.success) {
+        // Remove from saved reports list
+        setSaveState(prev => ({
+          ...prev,
+          savedReports: prev.savedReports.filter(r => r.id !== prev.deletingReportId),
+          showDeleteModal: false,
+          deletingReportId: null,
+          deletingReportName: ''
+        }));
+
+        // Remove from expanded reports if currently expanded
+        if (expandedReports.has(saveState.deletingReportId)) {
+          const newExpandedReports = new Map(expandedReports);
+          newExpandedReports.delete(saveState.deletingReportId);
+          setExpandedReports(newExpandedReports);
+        }
+
+        // Clear editing state if this report was being edited
+        if (editState.editingReportId === saveState.deletingReportId) {
+          if (editState.originalReportState) {
+            setReportState(editState.originalReportState);
+            setDataCache(prev => ({ ...prev, isStale: true }));
+          }
+          setEditState({
+            editingReportId: null,
+            isEditing: false,
+            originalReportState: null
+          });
+        }
+
+        console.log('Report deleted successfully:', saveState.deletingReportName);
+      }
+    } catch (error) {
+      console.error('Failed to delete report:', error);
+      setUiState(prev => ({
+        ...prev,
+        apiError: 'Failed to delete report: ' + error.message
+      }));
+    } finally {
+      setSaveState(prev => ({ ...prev, isDeleting: false }));
+    }
+  };
+
+  const cancelDeleteReport = () => {
+    setSaveState(prev => ({
+      ...prev,
+      showDeleteModal: false,
+      deletingReportId: null,
+      deletingReportName: ''
+    }));
+  };
+
   const getSmartDefaultSort = (measure, apiResponse) => {
     if (apiResponse?.queryMetadata?.activeColumns?.length > 0) {
       const activeColumns = apiResponse.queryMetadata.activeColumns;
@@ -743,24 +818,36 @@ const CustomReportsBuilder = () => {
                       }`}
                       onClick={() => !isLoading && !isCurrentlyEditing && handleLoadSavedReport(report.id, report.name)}
                     >
-                      {/* Edit button - appears on hover */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditSavedReport(report);
-                          setSaveState(prev => ({
-                            ...prev,
-                            saveName: report.name,
-                            saveDescription: report.description || ''
-                          }));
-                        }}
-                        className="absolute top-2 right-2 p-1.5 bg-white border border-gray-300 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-gray-50 z-10"
-                        title="Edit report"
-                      >
-                        <Edit3 className="w-3 h-3 text-gray-600" />
-                      </button>
+                      {/* Action buttons - appear on hover */}
+                      <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditSavedReport(report);
+                            setSaveState(prev => ({
+                              ...prev,
+                              saveName: report.name,
+                              saveDescription: report.description || ''
+                            }));
+                          }}
+                          className="p-1.5 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                          title="Edit report"
+                        >
+                          <Edit3 className="w-3 h-3 text-gray-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteSavedReport(report);
+                          }}
+                          className="p-1.5 bg-white border border-gray-300 rounded-md hover:bg-red-50 hover:border-red-300"
+                          title="Delete report"
+                        >
+                          <Trash2 className="w-3 h-3 text-red-600" />
+                        </button>
+                      </div>
 
-                      <div className="flex items-start justify-between mb-2 pr-8">
+                      <div className="flex items-start justify-between mb-2 pr-16"> {/* Increased padding for two buttons */}
                         <h4 className="font-medium text-gray-900 truncate">{report.name}</h4>
                         <div className="flex items-center space-x-1 flex-shrink-0">
                           {isLoading && (
@@ -1115,6 +1202,58 @@ const CustomReportsBuilder = () => {
                   </div>
                 ) : (
                   editState.isEditing ? 'Update Report' : 'Save Report'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {saveState.showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Delete Report</h3>
+                <p className="text-sm text-gray-600 mt-1">This action cannot be undone.</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-gray-700">
+                Are you sure you want to delete "<span className="font-medium">{saveState.deletingReportName}</span>"?
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                All cached data and configurations for this report will be permanently removed.
+              </p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={cancelDeleteReport}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                disabled={saveState.isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteReport}
+                disabled={saveState.isDeleting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {saveState.isDeleting ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Deleting...
+                  </div>
+                ) : (
+                  'Delete Report'
                 )}
               </button>
             </div>
