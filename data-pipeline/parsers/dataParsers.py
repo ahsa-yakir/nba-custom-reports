@@ -35,13 +35,30 @@ class GameDataParser:
         elif status_id == 3:
             status = 'completed'
         
+        # Determine game type from game_id or season type
+        game_type = 'regular'  # Default to regular season
+        
+        # NBA game IDs follow patterns:
+        # Regular season: 002YYSSSSSS (e.g., 0022300001)
+        # Playoffs: 004YYSSSSSS (e.g., 0042300001) 
+        # Preseason: 001YYSSSSSS (e.g., 0012300001)
+        if len(game_id) >= 3:
+            game_type_code = game_id[:3]
+            if game_type_code == '001':
+                game_type = 'preseason'
+            elif game_type_code == '002':
+                game_type = 'regular'
+            elif game_type_code == '004':
+                game_type = 'playoff'
+        
         return GameData(
             game_id=game_id,
             game_date=game_date,
             season=season,
             home_team_id=home_team_id,
             away_team_id=away_team_id,
-            status=status
+            status=status,
+            game_type=game_type
         )
 
 class TraditionalStatsParser:
