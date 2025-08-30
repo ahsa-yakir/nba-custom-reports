@@ -466,7 +466,7 @@ class DatabaseManager:
                     free_throws_made, free_throws_attempted, free_throw_percentage,
                     offensive_rebounds, defensive_rebounds, total_rebounds,
                     assists, steals, blocks, turnovers, personal_fouls, points
-                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                ) VALUES %s ON CONFLICT (player_id, season_id, team_id) DO UPDATE SET
                     team_id = EXCLUDED.team_id,
                     team_abbreviation = EXCLUDED.team_abbreviation,
                     player_age = EXCLUDED.player_age,
@@ -585,7 +585,7 @@ class DatabaseManager:
                     free_throws_made, free_throws_attempted, free_throw_percentage,
                     offensive_rebounds, defensive_rebounds, total_rebounds,
                     assists, steals, blocks, turnovers, personal_fouls, points
-                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                ) VALUES %s ON CONFLICT (player_id, season_id, team_id) DO UPDATE SET
                     team_id = EXCLUDED.team_id,
                     team_abbreviation = EXCLUDED.team_abbreviation,
                     player_age = EXCLUDED.player_age,
@@ -705,7 +705,7 @@ class DatabaseManager:
                     free_throws_made_rank, free_throws_attempted_rank, free_throw_percentage_rank,
                     offensive_rebounds_rank, defensive_rebounds_rank, total_rebounds_rank,
                     assists_rank, steals_rank, blocks_rank, turnovers_rank, personal_fouls_rank, points_rank
-                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                ) VALUES %s ON CONFLICT (player_id, season_id, team_id) DO UPDATE SET
                     team_id = EXCLUDED.team_id,
                     team_abbreviation = EXCLUDED.team_abbreviation,
                     player_age = EXCLUDED.player_age,
@@ -767,7 +767,7 @@ class DatabaseManager:
                     free_throws_made_rank, free_throws_attempted_rank, free_throw_percentage_rank,
                     offensive_rebounds_rank, defensive_rebounds_rank, total_rebounds_rank,
                     assists_rank, steals_rank, blocks_rank, turnovers_rank, personal_fouls_rank, points_rank
-                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                ) VALUES %s ON CONFLICT (player_id, season_id, team_id) DO UPDATE SET
                     team_id = EXCLUDED.team_id,
                     team_abbreviation = EXCLUDED.team_abbreviation,
                     player_age = EXCLUDED.player_age,

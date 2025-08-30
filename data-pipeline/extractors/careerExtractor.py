@@ -86,85 +86,46 @@ class CareerStatsExtractor:
         
         headers = season_data['headers']
         
-        # Group by season_id to handle trades (multiple teams per season)
-        seasons_dict = {}
-        
+        # Don't aggregate - create separate entries for each team, but SKIP "TOT" entries
         for row in season_data['rowSet']:
             stats_dict = dict(zip(headers, row))
-            season_id = stats_dict.get('SEASON_ID', '')
             
-            if season_id not in seasons_dict:
-                # First team for this season
-                seasons_dict[season_id] = {
-                    'player_id': player_id,
-                    'season_id': season_id,
-                    'league_id': stats_dict.get('LEAGUE_ID', '00'),
-                    'team_id': str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
-                    'team_abbreviation': stats_dict.get('TEAM_ABBREVIATION', ''),
-                    'player_age': stats_dict.get('PLAYER_AGE'),
-                    'games_played': stats_dict.get('GP', 0),
-                    'games_started': stats_dict.get('GS', 0),
-                    'minutes_played': stats_dict.get('MIN', 0.0),
-                    'field_goals_made': stats_dict.get('FGM', 0),
-                    'field_goals_attempted': stats_dict.get('FGA', 0),
-                    'field_goal_percentage': 0.0,  # Will recalculate
-                    'three_pointers_made': stats_dict.get('FG3M', 0),
-                    'three_pointers_attempted': stats_dict.get('FG3A', 0),
-                    'three_point_percentage': 0.0,  # Will recalculate
-                    'free_throws_made': stats_dict.get('FTM', 0),
-                    'free_throws_attempted': stats_dict.get('FTA', 0),
-                    'free_throw_percentage': 0.0,  # Will recalculate
-                    'offensive_rebounds': stats_dict.get('OREB', 0),
-                    'defensive_rebounds': stats_dict.get('DREB', 0),
-                    'total_rebounds': stats_dict.get('REB', 0),
-                    'assists': stats_dict.get('AST', 0),
-                    'steals': stats_dict.get('STL', 0),
-                    'blocks': stats_dict.get('BLK', 0),
-                    'turnovers': stats_dict.get('TOV', 0),
-                    'personal_fouls': stats_dict.get('PF', 0),
-                    'points': stats_dict.get('PTS', 0)
-                }
-            else:
-                # Additional team for this season - aggregate stats
-                existing = seasons_dict[season_id]
-                # Keep only the first team abbreviation to stay within VARCHAR(5) limit
-                # existing['team_abbreviation'] += f"/{stats_dict.get('TEAM_ABBREVIATION', '')}"  # Show all teams
-                existing['games_played'] += stats_dict.get('GP', 0)
-                existing['games_started'] += stats_dict.get('GS', 0)
-                existing['minutes_played'] += stats_dict.get('MIN', 0.0)
-                existing['field_goals_made'] += stats_dict.get('FGM', 0)
-                existing['field_goals_attempted'] += stats_dict.get('FGA', 0)
-                existing['three_pointers_made'] += stats_dict.get('FG3M', 0)
-                existing['three_pointers_attempted'] += stats_dict.get('FG3A', 0)
-                existing['free_throws_made'] += stats_dict.get('FTM', 0)
-                existing['free_throws_attempted'] += stats_dict.get('FTA', 0)
-                existing['offensive_rebounds'] += stats_dict.get('OREB', 0)
-                existing['defensive_rebounds'] += stats_dict.get('DREB', 0)
-                existing['total_rebounds'] += stats_dict.get('REB', 0)
-                existing['assists'] += stats_dict.get('AST', 0)
-                existing['steals'] += stats_dict.get('STL', 0)
-                existing['blocks'] += stats_dict.get('BLK', 0)
-                existing['turnovers'] += stats_dict.get('TOV', 0)
-                existing['personal_fouls'] += stats_dict.get('PF', 0)
-                existing['points'] += stats_dict.get('PTS', 0)
-        
-        # Convert aggregated data to PlayerSeasonTotals objects
-        for season_id, stats in seasons_dict.items():
-            # Recalculate percentages
-            stats['field_goal_percentage'] = (
-                stats['field_goals_made'] / stats['field_goals_attempted'] 
-                if stats['field_goals_attempted'] > 0 else 0.0
-            )
-            stats['three_point_percentage'] = (
-                stats['three_pointers_made'] / stats['three_pointers_attempted'] 
-                if stats['three_pointers_attempted'] > 0 else 0.0
-            )
-            stats['free_throw_percentage'] = (
-                stats['free_throws_made'] / stats['free_throws_attempted'] 
-                if stats['free_throws_attempted'] > 0 else 0.0
+            # Skip "TOT" (total) entries - we want individual team entries only
+            team_abbreviation = stats_dict.get('TEAM_ABBREVIATION', '')
+            if team_abbreviation == 'TOT':
+                logger.debug(f"Skipping TOT entry for player {player_id} in season {stats_dict.get('SEASON_ID', '')}")
+                continue
+            
+            season_total = PlayerSeasonTotals(
+                player_id=player_id,
+                season_id=stats_dict.get('SEASON_ID', ''),
+                league_id=stats_dict.get('LEAGUE_ID', '00'),
+                team_id=str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
+                team_abbreviation=team_abbreviation,
+                player_age=stats_dict.get('PLAYER_AGE'),
+                games_played=stats_dict.get('GP', 0),
+                games_started=stats_dict.get('GS', 0),
+                minutes_played=stats_dict.get('MIN', 0.0),
+                field_goals_made=stats_dict.get('FGM', 0),
+                field_goals_attempted=stats_dict.get('FGA', 0),
+                field_goal_percentage=stats_dict.get('FG_PCT', 0.0),
+                three_pointers_made=stats_dict.get('FG3M', 0),
+                three_pointers_attempted=stats_dict.get('FG3A', 0),
+                three_point_percentage=stats_dict.get('FG3_PCT', 0.0),
+                free_throws_made=stats_dict.get('FTM', 0),
+                free_throws_attempted=stats_dict.get('FTA', 0),
+                free_throw_percentage=stats_dict.get('FT_PCT', 0.0),
+                offensive_rebounds=stats_dict.get('OREB', 0),
+                defensive_rebounds=stats_dict.get('DREB', 0),
+                total_rebounds=stats_dict.get('REB', 0),
+                assists=stats_dict.get('AST', 0),
+                steals=stats_dict.get('STL', 0),
+                blocks=stats_dict.get('BLK', 0),
+                turnovers=stats_dict.get('TOV', 0),
+                personal_fouls=stats_dict.get('PF', 0),
+                points=stats_dict.get('PTS', 0)
             )
             
-            season_total = PlayerSeasonTotals(**stats)
             season_totals.append(season_total)
         
         return season_totals
@@ -231,15 +192,22 @@ class CareerStatsExtractor:
         
         headers = season_data['headers']
         
+        # Skip "TOT" entries for playoffs as well
         for row in season_data['rowSet']:
             stats_dict = dict(zip(headers, row))
+            
+            # Skip "TOT" (total) entries - we want individual team entries only
+            team_abbreviation = stats_dict.get('TEAM_ABBREVIATION', '')
+            if team_abbreviation == 'TOT':
+                logger.debug(f"Skipping playoff TOT entry for player {player_id} in season {stats_dict.get('SEASON_ID', '')}")
+                continue
             
             season_total = PlayerSeasonTotals(
                 player_id=player_id,
                 season_id=stats_dict.get('SEASON_ID', ''),
                 league_id=stats_dict.get('LEAGUE_ID', '00'),
                 team_id=str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
-                team_abbreviation=stats_dict.get('TEAM_ABBREVIATION', ''),
+                team_abbreviation=team_abbreviation,
                 player_age=stats_dict.get('PLAYER_AGE'),
                 games_played=stats_dict.get('GP', 0),
                 games_started=stats_dict.get('GS', 0),
@@ -333,6 +301,12 @@ class CareerStatsExtractor:
         for row in rankings_data['rowSet']:
             stats_dict = dict(zip(headers, row))
             
+            # Skip "TOT" (total) entries for rankings as well
+            team_abbreviation = stats_dict.get('TEAM_ABBREVIATION', '')
+            if team_abbreviation == 'TOT':
+                logger.debug(f"Skipping rankings TOT entry for player {player_id} in season {stats_dict.get('SEASON_ID', '')}")
+                continue
+            
             # Helper function to convert rank values to integers or None
             def parse_rank(value):
                 if value is None or value == '' or str(value).upper() in ['NR', 'N/A', 'NULL']:
@@ -347,7 +321,7 @@ class CareerStatsExtractor:
                 season_id=stats_dict.get('SEASON_ID', ''),
                 league_id=stats_dict.get('LEAGUE_ID', '00'),
                 team_id=str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
-                team_abbreviation=stats_dict.get('TEAM_ABBREVIATION', ''),
+                team_abbreviation=team_abbreviation,
                 player_age=parse_rank(stats_dict.get('PLAYER_AGE')),
                 games_played_rank=parse_rank(stats_dict.get('GP_RANK')),
                 games_started_rank=parse_rank(stats_dict.get('GS_RANK')),
@@ -396,6 +370,12 @@ class CareerStatsExtractor:
         for row in rankings_data['rowSet']:
             stats_dict = dict(zip(headers, row))
             
+            # Skip "TOT" (total) entries for playoff rankings as well
+            team_abbreviation = stats_dict.get('TEAM_ABBREVIATION', '')
+            if team_abbreviation == 'TOT':
+                logger.debug(f"Skipping playoff rankings TOT entry for player {player_id} in season {stats_dict.get('SEASON_ID', '')}")
+                continue
+            
             # Helper function to convert rank values to integers or None
             def parse_rank(value):
                 if value is None or value == '' or str(value).upper() in ['NR', 'N/A', 'NULL']:
@@ -410,7 +390,7 @@ class CareerStatsExtractor:
                 season_id=stats_dict.get('SEASON_ID', ''),
                 league_id=stats_dict.get('LEAGUE_ID', '00'),
                 team_id=str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
-                team_abbreviation=stats_dict.get('TEAM_ABBREVIATION', ''),
+                team_abbreviation=team_abbreviation,
                 player_age=parse_rank(stats_dict.get('PLAYER_AGE')),
                 games_played_rank=parse_rank(stats_dict.get('GP_RANK')),
                 games_started_rank=parse_rank(stats_dict.get('GS_RANK')),
