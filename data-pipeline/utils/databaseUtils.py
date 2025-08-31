@@ -43,6 +43,84 @@ class DatabaseManager:
             logger.error(f"Error checking if team {team_id} exists: {e}")
             return False
     
+    def calculate_game_numbers(self, game_data) -> None:
+        """
+        Calculate game numbers for home and away teams
+        Modifies the game_data object in place
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Calculate home team game numbers
+                # Overall season game number
+                cursor.execute("""
+                    SELECT COALESCE(MAX(home_team_game_number), 0) as max_home,
+                           COALESCE(MAX(away_team_game_number), 0) as max_away
+                    FROM games 
+                    WHERE (home_team_id = %s OR away_team_id = %s) 
+                    AND season = %s
+                """, [game_data.home_team_id, game_data.home_team_id, game_data.season])
+                
+                result = cursor.fetchone()
+                home_team_max_game_num = max(result[0] if result[0] else 0, result[1] if result[1] else 0)
+                game_data.home_team_game_number = home_team_max_game_num + 1
+                
+                # Home team game type number (regular vs playoff)
+                cursor.execute("""
+                    SELECT COALESCE(MAX(home_team_game_type_number), 0) as max_home,
+                           COALESCE(MAX(away_team_game_type_number), 0) as max_away
+                    FROM games 
+                    WHERE (home_team_id = %s OR away_team_id = %s) 
+                    AND season = %s AND game_type = %s
+                """, [game_data.home_team_id, game_data.home_team_id, game_data.season, game_data.game_type])
+                
+                result = cursor.fetchone()
+                home_team_max_type_num = max(result[0] if result[0] else 0, result[1] if result[1] else 0)
+                game_data.home_team_game_type_number = home_team_max_type_num + 1
+                
+                # Calculate away team game numbers
+                # Overall season game number
+                cursor.execute("""
+                    SELECT COALESCE(MAX(home_team_game_number), 0) as max_home,
+                           COALESCE(MAX(away_team_game_number), 0) as max_away
+                    FROM games 
+                    WHERE (home_team_id = %s OR away_team_id = %s) 
+                    AND season = %s
+                """, [game_data.away_team_id, game_data.away_team_id, game_data.season])
+                
+                result = cursor.fetchone()
+                away_team_max_game_num = max(result[0] if result[0] else 0, result[1] if result[1] else 0)
+                game_data.away_team_game_number = away_team_max_game_num + 1
+                
+                # Away team game type number (regular vs playoff)
+                cursor.execute("""
+                    SELECT COALESCE(MAX(home_team_game_type_number), 0) as max_home,
+                           COALESCE(MAX(away_team_game_type_number), 0) as max_away
+                    FROM games 
+                    WHERE (home_team_id = %s OR away_team_id = %s) 
+                    AND season = %s AND game_type = %s
+                """, [game_data.away_team_id, game_data.away_team_id, game_data.season, game_data.game_type])
+                
+                result = cursor.fetchone()
+                away_team_max_type_num = max(result[0] if result[0] else 0, result[1] if result[1] else 0)
+                game_data.away_team_game_type_number = away_team_max_type_num + 1
+                
+                cursor.close()
+                
+                logger.debug(f"Game {game_data.game_id}: Home team {game_data.home_team_id} - "
+                           f"Game #{game_data.home_team_game_number}, {game_data.game_type} #{game_data.home_team_game_type_number}")
+                logger.debug(f"Game {game_data.game_id}: Away team {game_data.away_team_id} - "
+                           f"Game #{game_data.away_team_game_number}, {game_data.game_type} #{game_data.away_team_game_type_number}")
+                
+        except Exception as e:
+            logger.error(f"Error calculating game numbers for game {game_data.game_id}: {e}")
+            # Set default values if calculation fails
+            game_data.home_team_game_number = 1
+            game_data.away_team_game_number = 1
+            game_data.home_team_game_type_number = 1
+            game_data.away_team_game_type_number = 1
+    
     def get_game_info(self, game_id: str) -> Dict:
         """Get basic game information from database"""
         try:
@@ -83,32 +161,45 @@ class DatabaseManager:
             return [dict(game) for game in games]
     
     def insert_games(self, games: List) -> None:
-        """Insert games into database"""
+        """Insert games into database with calculated game numbers"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
             game_data = []
             for game in games:
+                # Calculate game numbers before insertion
+                self.calculate_game_numbers(game)
+                
                 game_data.append((
                     game.game_id, game.game_date, game.season, game.status,
                     game.home_team_id, game.away_team_id,
-                    game.home_score, game.away_score
+                    game.home_score, game.away_score,
+                    game.home_team_game_number, game.away_team_game_number,
+                    game.home_team_game_type_number, game.away_team_game_type_number
                 ))
             
             execute_values(
                 cursor,
-                """INSERT INTO games (id, game_date, season, status, home_team_id, away_team_id, home_score, away_score)
-                   VALUES %s ON CONFLICT (id) DO UPDATE SET
+                """INSERT INTO games (
+                    id, game_date, season, status, home_team_id, away_team_id, 
+                    home_score, away_score,
+                    home_team_game_number, away_team_game_number,
+                    home_team_game_type_number, away_team_game_type_number
+                ) VALUES %s ON CONFLICT (id) DO UPDATE SET
                    home_score = EXCLUDED.home_score,
                    away_score = EXCLUDED.away_score,
                    status = EXCLUDED.status,
+                   home_team_game_number = EXCLUDED.home_team_game_number,
+                   away_team_game_number = EXCLUDED.away_team_game_number,
+                   home_team_game_type_number = EXCLUDED.home_team_game_type_number,
+                   away_team_game_type_number = EXCLUDED.away_team_game_type_number,
                    updated_at = CURRENT_TIMESTAMP""",
                 game_data
             )
             
             conn.commit()
             cursor.close()
-            logger.info(f"Inserted {len(games)} games")
+            logger.info(f"Inserted {len(games)} games with game numbering")
     
     def insert_team_game_stats(self, team_stats: List) -> None:
         """Insert team game statistics"""
@@ -375,7 +466,7 @@ class DatabaseManager:
                     free_throws_made, free_throws_attempted, free_throw_percentage,
                     offensive_rebounds, defensive_rebounds, total_rebounds,
                     assists, steals, blocks, turnovers, personal_fouls, points
-                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                ) VALUES %s ON CONFLICT (player_id, season_id, team_id) DO UPDATE SET
                     team_id = EXCLUDED.team_id,
                     team_abbreviation = EXCLUDED.team_abbreviation,
                     player_age = EXCLUDED.player_age,
@@ -494,7 +585,7 @@ class DatabaseManager:
                     free_throws_made, free_throws_attempted, free_throw_percentage,
                     offensive_rebounds, defensive_rebounds, total_rebounds,
                     assists, steals, blocks, turnovers, personal_fouls, points
-                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                ) VALUES %s ON CONFLICT (player_id, season_id, team_id) DO UPDATE SET
                     team_id = EXCLUDED.team_id,
                     team_abbreviation = EXCLUDED.team_abbreviation,
                     player_age = EXCLUDED.player_age,
@@ -614,7 +705,7 @@ class DatabaseManager:
                     free_throws_made_rank, free_throws_attempted_rank, free_throw_percentage_rank,
                     offensive_rebounds_rank, defensive_rebounds_rank, total_rebounds_rank,
                     assists_rank, steals_rank, blocks_rank, turnovers_rank, personal_fouls_rank, points_rank
-                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                ) VALUES %s ON CONFLICT (player_id, season_id, team_id) DO UPDATE SET
                     team_id = EXCLUDED.team_id,
                     team_abbreviation = EXCLUDED.team_abbreviation,
                     player_age = EXCLUDED.player_age,
@@ -676,7 +767,7 @@ class DatabaseManager:
                     free_throws_made_rank, free_throws_attempted_rank, free_throw_percentage_rank,
                     offensive_rebounds_rank, defensive_rebounds_rank, total_rebounds_rank,
                     assists_rank, steals_rank, blocks_rank, turnovers_rank, personal_fouls_rank, points_rank
-                ) VALUES %s ON CONFLICT (player_id, season_id) DO UPDATE SET
+                ) VALUES %s ON CONFLICT (player_id, season_id, team_id) DO UPDATE SET
                     team_id = EXCLUDED.team_id,
                     team_abbreviation = EXCLUDED.team_abbreviation,
                     player_age = EXCLUDED.player_age,

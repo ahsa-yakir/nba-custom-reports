@@ -57,6 +57,22 @@ CREATE INDEX idx_games_team_date ON games(home_team_id, game_date);
 -- Score lookups
 CREATE INDEX idx_games_scores ON games(home_score, away_score);
 
+-- NEW: Game numbering indexes for organizers
+CREATE INDEX idx_games_home_team_game_number ON games(home_team_game_number);
+CREATE INDEX idx_games_away_team_game_number ON games(away_team_game_number);
+CREATE INDEX idx_games_home_team_game_type_number ON games(home_team_game_type_number);
+CREATE INDEX idx_games_away_team_game_type_number ON games(away_team_game_type_number);
+
+-- Composite indexes for game numbering queries
+CREATE INDEX idx_games_home_team_season_game_num ON games(home_team_id, season, home_team_game_number);
+CREATE INDEX idx_games_away_team_season_game_num ON games(away_team_id, season, away_team_game_number);
+CREATE INDEX idx_games_home_team_type_game_num ON games(home_team_id, game_type, home_team_game_type_number);
+CREATE INDEX idx_games_away_team_type_game_num ON games(away_team_id, game_type, away_team_game_type_number);
+
+-- Indexes for "last X games" type queries
+CREATE INDEX idx_games_home_team_season_num_desc ON games(home_team_id, season, home_team_game_number DESC);
+CREATE INDEX idx_games_away_team_season_num_desc ON games(away_team_id, season, away_team_game_number DESC);
+
 -- =====================================================
 -- PLAYER GAME STATS INDEXES
 -- =====================================================

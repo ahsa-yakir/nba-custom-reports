@@ -49,6 +49,13 @@ CREATE TABLE games (
     home_score INTEGER,
     away_score INTEGER,
     status VARCHAR(20) DEFAULT 'completed',
+    
+    -- Game numbering columns for organizers
+    home_team_game_number INTEGER,
+    away_team_game_number INTEGER,
+    home_team_game_type_number INTEGER,
+    away_team_game_type_number INTEGER,
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
@@ -409,6 +416,12 @@ COMMENT ON TABLE team_advanced_stats IS 'Team advanced statistics for each game'
 COMMENT ON COLUMN teams.id IS 'NBA API Team ID (e.g., 1610612737 for Atlanta Hawks)';
 COMMENT ON COLUMN players.id IS 'NBA API Player ID (e.g., 2544 for LeBron James)';
 COMMENT ON COLUMN games.id IS 'NBA API Game ID (e.g., 0022300001)';
+
+-- Game numbering column comments
+COMMENT ON COLUMN games.home_team_game_number IS 'Sequential game number for home team in this season (1, 2, 3, ...)';
+COMMENT ON COLUMN games.away_team_game_number IS 'Sequential game number for away team in this season (1, 2, 3, ...)';
+COMMENT ON COLUMN games.home_team_game_type_number IS 'Sequential game number for home team in this game type (regular/playoff)';
+COMMENT ON COLUMN games.away_team_game_type_number IS 'Sequential game number for away team in this game type (regular/playoff)';
 
 -- Advanced stats column comments
 COMMENT ON COLUMN player_advanced_stats.offensive_rating IS 'Points produced per 100 possessions';

@@ -18,6 +18,13 @@ class GameData:
     home_score: Optional[int] = None
     away_score: Optional[int] = None
     status: str = 'scheduled'
+    game_type: str = 'regular'  # 'regular', 'playoff', 'preseason'
+    
+    # Game numbering fields for organizers
+    home_team_game_number: Optional[int] = None
+    away_team_game_number: Optional[int] = None
+    home_team_game_type_number: Optional[int] = None
+    away_team_game_type_number: Optional[int] = None
 
 @dataclass 
 class TeamGameStats:

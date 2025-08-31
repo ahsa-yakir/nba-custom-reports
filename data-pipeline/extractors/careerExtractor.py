@@ -86,15 +86,22 @@ class CareerStatsExtractor:
         
         headers = season_data['headers']
         
+        # Don't aggregate - create separate entries for each team, but SKIP "TOT" entries
         for row in season_data['rowSet']:
             stats_dict = dict(zip(headers, row))
+            
+            # Skip "TOT" (total) entries - we want individual team entries only
+            team_abbreviation = stats_dict.get('TEAM_ABBREVIATION', '')
+            if team_abbreviation == 'TOT':
+                logger.debug(f"Skipping TOT entry for player {player_id} in season {stats_dict.get('SEASON_ID', '')}")
+                continue
             
             season_total = PlayerSeasonTotals(
                 player_id=player_id,
                 season_id=stats_dict.get('SEASON_ID', ''),
                 league_id=stats_dict.get('LEAGUE_ID', '00'),
                 team_id=str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
-                team_abbreviation=stats_dict.get('TEAM_ABBREVIATION', ''),
+                team_abbreviation=team_abbreviation,
                 player_age=stats_dict.get('PLAYER_AGE'),
                 games_played=stats_dict.get('GP', 0),
                 games_started=stats_dict.get('GS', 0),
@@ -185,15 +192,22 @@ class CareerStatsExtractor:
         
         headers = season_data['headers']
         
+        # Skip "TOT" entries for playoffs as well
         for row in season_data['rowSet']:
             stats_dict = dict(zip(headers, row))
+            
+            # Skip "TOT" (total) entries - we want individual team entries only
+            team_abbreviation = stats_dict.get('TEAM_ABBREVIATION', '')
+            if team_abbreviation == 'TOT':
+                logger.debug(f"Skipping playoff TOT entry for player {player_id} in season {stats_dict.get('SEASON_ID', '')}")
+                continue
             
             season_total = PlayerSeasonTotals(
                 player_id=player_id,
                 season_id=stats_dict.get('SEASON_ID', ''),
                 league_id=stats_dict.get('LEAGUE_ID', '00'),
                 team_id=str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
-                team_abbreviation=stats_dict.get('TEAM_ABBREVIATION', ''),
+                team_abbreviation=team_abbreviation,
                 player_age=stats_dict.get('PLAYER_AGE'),
                 games_played=stats_dict.get('GP', 0),
                 games_started=stats_dict.get('GS', 0),
@@ -287,6 +301,12 @@ class CareerStatsExtractor:
         for row in rankings_data['rowSet']:
             stats_dict = dict(zip(headers, row))
             
+            # Skip "TOT" (total) entries for rankings as well
+            team_abbreviation = stats_dict.get('TEAM_ABBREVIATION', '')
+            if team_abbreviation == 'TOT':
+                logger.debug(f"Skipping rankings TOT entry for player {player_id} in season {stats_dict.get('SEASON_ID', '')}")
+                continue
+            
             # Helper function to convert rank values to integers or None
             def parse_rank(value):
                 if value is None or value == '' or str(value).upper() in ['NR', 'N/A', 'NULL']:
@@ -301,7 +321,7 @@ class CareerStatsExtractor:
                 season_id=stats_dict.get('SEASON_ID', ''),
                 league_id=stats_dict.get('LEAGUE_ID', '00'),
                 team_id=str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
-                team_abbreviation=stats_dict.get('TEAM_ABBREVIATION', ''),
+                team_abbreviation=team_abbreviation,
                 player_age=parse_rank(stats_dict.get('PLAYER_AGE')),
                 games_played_rank=parse_rank(stats_dict.get('GP_RANK')),
                 games_started_rank=parse_rank(stats_dict.get('GS_RANK')),
@@ -350,6 +370,12 @@ class CareerStatsExtractor:
         for row in rankings_data['rowSet']:
             stats_dict = dict(zip(headers, row))
             
+            # Skip "TOT" (total) entries for playoff rankings as well
+            team_abbreviation = stats_dict.get('TEAM_ABBREVIATION', '')
+            if team_abbreviation == 'TOT':
+                logger.debug(f"Skipping playoff rankings TOT entry for player {player_id} in season {stats_dict.get('SEASON_ID', '')}")
+                continue
+            
             # Helper function to convert rank values to integers or None
             def parse_rank(value):
                 if value is None or value == '' or str(value).upper() in ['NR', 'N/A', 'NULL']:
@@ -364,7 +390,7 @@ class CareerStatsExtractor:
                 season_id=stats_dict.get('SEASON_ID', ''),
                 league_id=stats_dict.get('LEAGUE_ID', '00'),
                 team_id=str(stats_dict.get('TEAM_ID', '')) if stats_dict.get('TEAM_ID') else None,
-                team_abbreviation=stats_dict.get('TEAM_ABBREVIATION', ''),
+                team_abbreviation=team_abbreviation,
                 player_age=parse_rank(stats_dict.get('PLAYER_AGE')),
                 games_played_rank=parse_rank(stats_dict.get('GP_RANK')),
                 games_started_rank=parse_rank(stats_dict.get('GS_RANK')),

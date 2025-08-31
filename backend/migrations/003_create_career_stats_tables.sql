@@ -55,8 +55,8 @@ CREATE TABLE player_season_totals_regular (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- Constraints
-    UNIQUE(player_id, season_id),
+    -- Constraints - allow multiple teams per season
+    UNIQUE(player_id, season_id, team_id),
     
     -- Foreign key constraints
     CONSTRAINT player_season_totals_regular_player_id_fkey 
@@ -160,8 +160,8 @@ CREATE TABLE player_season_totals_playoffs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- Constraints
-    UNIQUE(player_id, season_id),
+    -- Constraints - allow multiple teams per season
+    UNIQUE(player_id, season_id, team_id),
     
     -- Foreign key constraints
     CONSTRAINT player_season_totals_playoffs_player_id_fkey 
@@ -265,8 +265,8 @@ CREATE TABLE player_season_rankings_regular (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- Constraints
-    UNIQUE(player_id, season_id),
+    -- Constraints - allow multiple teams per season
+    UNIQUE(player_id, season_id, team_id),
     
     -- Foreign key constraints
     CONSTRAINT player_season_rankings_regular_player_id_fkey 
@@ -322,8 +322,8 @@ CREATE TABLE player_season_rankings_playoffs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- Constraints
-    UNIQUE(player_id, season_id),
+    -- Constraints - allow multiple teams per season
+    UNIQUE(player_id, season_id, team_id),
     
     -- Foreign key constraints
     CONSTRAINT player_season_rankings_playoffs_player_id_fkey 
@@ -342,6 +342,7 @@ CREATE INDEX idx_season_totals_regular_season_id ON player_season_totals_regular
 CREATE INDEX idx_season_totals_regular_team_id ON player_season_totals_regular(team_id);
 CREATE INDEX idx_season_totals_regular_points ON player_season_totals_regular(points);
 CREATE INDEX idx_season_totals_regular_player_season ON player_season_totals_regular(player_id, season_id);
+CREATE INDEX idx_season_totals_regular_player_team_season ON player_season_totals_regular(player_id, team_id, season_id);
 
 -- Career totals regular season indexes
 CREATE INDEX idx_career_totals_regular_player_id ON player_career_totals_regular(player_id);
@@ -354,6 +355,7 @@ CREATE INDEX idx_season_totals_playoffs_season_id ON player_season_totals_playof
 CREATE INDEX idx_season_totals_playoffs_team_id ON player_season_totals_playoffs(team_id);
 CREATE INDEX idx_season_totals_playoffs_points ON player_season_totals_playoffs(points);
 CREATE INDEX idx_season_totals_playoffs_player_season ON player_season_totals_playoffs(player_id, season_id);
+CREATE INDEX idx_season_totals_playoffs_player_team_season ON player_season_totals_playoffs(player_id, team_id, season_id);
 
 -- Career totals playoffs indexes
 CREATE INDEX idx_career_totals_playoffs_player_id ON player_career_totals_playoffs(player_id);
@@ -365,12 +367,14 @@ CREATE INDEX idx_season_rankings_regular_player_id ON player_season_rankings_reg
 CREATE INDEX idx_season_rankings_regular_season_id ON player_season_rankings_regular(season_id);
 CREATE INDEX idx_season_rankings_regular_points_rank ON player_season_rankings_regular(points_rank);
 CREATE INDEX idx_season_rankings_regular_player_season ON player_season_rankings_regular(player_id, season_id);
+CREATE INDEX idx_season_rankings_regular_player_team_season ON player_season_rankings_regular(player_id, team_id, season_id);
 
 -- Season rankings playoffs indexes
 CREATE INDEX idx_season_rankings_playoffs_player_id ON player_season_rankings_playoffs(player_id);
 CREATE INDEX idx_season_rankings_playoffs_season_id ON player_season_rankings_playoffs(season_id);
 CREATE INDEX idx_season_rankings_playoffs_points_rank ON player_season_rankings_playoffs(points_rank);
 CREATE INDEX idx_season_rankings_playoffs_player_season ON player_season_rankings_playoffs(player_id, season_id);
+CREATE INDEX idx_season_rankings_playoffs_player_team_season ON player_season_rankings_playoffs(player_id, team_id, season_id);
 
 -- =====================================================
 -- VIEWS FOR CAREER ANALYTICS
@@ -415,7 +419,7 @@ LEFT JOIN teams t ON p.team_id = t.id
 LEFT JOIN player_career_totals_regular pctr ON p.id = pctr.player_id
 LEFT JOIN player_career_totals_playoffs pctp ON p.id = pctp.player_id;
 
--- Player season progression
+-- Player season progression (showing each team separately)
 CREATE VIEW player_season_progression AS
 SELECT 
     p.id as player_id,
@@ -435,18 +439,18 @@ SELECT
     pstr.free_throw_percentage
 FROM players p
 JOIN player_season_totals_regular pstr ON p.id = pstr.player_id
-ORDER BY p.id, pstr.season_id;
+ORDER BY p.id, pstr.season_id, pstr.team_abbreviation;
 
 -- =====================================================
 -- COMMENTS FOR DOCUMENTATION
 -- =====================================================
 
-COMMENT ON TABLE player_season_totals_regular IS 'Player traditional statistics totals for each regular season';
+COMMENT ON TABLE player_season_totals_regular IS 'Player traditional statistics totals for each regular season (separate record per team if traded)';
 COMMENT ON TABLE player_career_totals_regular IS 'Player career totals for regular season (all seasons combined)';
-COMMENT ON TABLE player_season_totals_playoffs IS 'Player traditional statistics totals for each playoff season';
+COMMENT ON TABLE player_season_totals_playoffs IS 'Player traditional statistics totals for each playoff season (separate record per team if traded)';
 COMMENT ON TABLE player_career_totals_playoffs IS 'Player career totals for playoffs (all seasons combined)';
-COMMENT ON TABLE player_season_rankings_regular IS 'Player league rankings for each regular season';
-COMMENT ON TABLE player_season_rankings_playoffs IS 'Player league rankings for each playoff season';
+COMMENT ON TABLE player_season_rankings_regular IS 'Player league rankings for each regular season (separate record per team if traded)';
+COMMENT ON TABLE player_season_rankings_playoffs IS 'Player league rankings for each playoff season (separate record per team if traded)';
 
 COMMENT ON COLUMN player_season_totals_regular.season_id IS 'NBA Season ID (e.g., 2023-24)';
 COMMENT ON COLUMN player_season_totals_regular.player_age IS 'Player age during that season';
@@ -459,4 +463,4 @@ SELECT 'Career statistics tables and views created successfully!' as status;
 SELECT 'Career tables created: ' || COUNT(*) as table_count 
 FROM information_schema.tables 
 WHERE table_schema = 'public' AND table_type = 'BASE TABLE' 
-AND table_name LIKE '%career%' OR table_name LIKE '%season%';
+AND (table_name LIKE '%career%' OR table_name LIKE '%season%');
