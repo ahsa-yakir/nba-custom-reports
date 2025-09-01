@@ -1,5 +1,6 @@
 /**
- * Enhanced report controller supporting organizers and unified queries
+ * Updated report controller using restructured query builder
+ * Now properly handles organizers -> aggregation -> filtering workflow
  */
 const { 
   buildReportQuery, 
@@ -13,8 +14,6 @@ const {
   validateOrganizer,
   getOrganizerDescription
 } = require('../utils/queryBuilder');
-
-const { executeQuery: unifiedExecuteQuery } = require('../utils/unifiedQueryBuilder');
 
 const generateReport = async (req, res) => {
   try {
@@ -61,11 +60,11 @@ const generateReport = async (req, res) => {
     const recommendedViewType = getRecommendedViewType(filters);
     const activeColumns = getActiveColumns(filters, measure);
     
-    console.log(`Generating ${measure} report with ${filters.length} filters and organizer: ${getOrganizerDescription(normalizedOrganizer)}`);
-    console.log('Filter analysis:', filterAnalysis);
-    console.log('Recommended view:', recommendedViewType);
+    console.log(`🔧 Generating ${measure} report with organizer: ${getOrganizerDescription(normalizedOrganizer)}`);
+    console.log('📊 Filter analysis:', filterAnalysis);
+    console.log('💡 Recommended view:', recommendedViewType);
     
-    // Build query using enhanced query builder with organizer
+    // Build query using restructured query builder with organizer-first approach
     const queryResult = buildReportQuery(measure, filters, normalizedOrganizer, sortConfig, 100, viewType);
     const { 
       sql, 
@@ -78,16 +77,16 @@ const generateReport = async (req, res) => {
       organizerDescription
     } = queryResult;
     
-    console.log('Query type:', isUnified ? 'Unified' : (isAdvanced ? 'Advanced' : 'Traditional'));
-    console.log('Organizer:', organizerDescription);
-    console.log('Executing SQL:', sql.substring(0, 200) + '...');
+    console.log('🎯 Query type:', isUnified ? 'Unified' : (isAdvanced ? 'Advanced' : 'Traditional'));
+    console.log('🎯 Organizer:', organizerDescription);
+    console.log('🎯 Approach: Organizer -> Aggregate -> Filter');
+    console.log('🔍 Executing SQL:', sql.substring(0, 200) + '...');
     
-    // Execute query using appropriate method
-    const result = isUnified 
-      ? await unifiedExecuteQuery(sql, params)
-      : await executeQuery(sql, params);
+    // Execute query
+    const result = await executeQuery(sql, params);
     
-    console.log(`Query completed: ${result.rows.length} results`);
+    console.log(`✅ Query completed: ${result.rows.length} results`);
+    console.log('📈 Sample result:', result.rows[0] ? JSON.stringify(result.rows[0], null, 2) : 'No results');
     
     // Determine final view type for response
     let finalViewType = viewType;
@@ -117,8 +116,10 @@ const generateReport = async (req, res) => {
         activeColumns: activeColumns,
         autoSwitched: finalViewType !== viewType,
         hasAdvancedData: isUnified || isAdvanced,
-        hasTraditionalData: true, // Always true since we JOIN traditional stats
-        organizerApplied: normalizedOrganizer.type !== 'all_games'
+        hasTraditionalData: true,
+        organizerApplied: normalizedOrganizer.type !== 'all_games',
+        queryApproach: 'organizer_first', // New field to indicate the approach
+        aggregationLevel: 'post_organizer' // Indicates that aggregation happens after organizer scoping
       },
       count: result.rows.length,
       results: result.rows,
@@ -130,12 +131,21 @@ const generateReport = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Report generation error:', error);
+    console.error('❌ Report generation error:', error);
+    
+    // Enhanced error logging for debugging
+    if (error.message.includes('column') || error.message.includes('relation')) {
+      console.error('🔍 SQL Error Details:', {
+        message: error.message,
+        hint: 'This might be a column mapping or table structure issue'
+      });
+    }
     
     res.status(500).json({
       error: 'Report generation failed',
       message: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      queryApproach: 'organizer_first'
     });
   }
 };
@@ -202,7 +212,9 @@ const validateReport = async (req, res) => {
     
     // Enhanced recommendations
     const recommendations = {
-      message: 'Report configuration analyzed',
+      message: 'Report configuration analyzed with organizer-first approach',
+      approach: 'organizer_first',
+      workflow: 'Organizer defines scope → Calculate averages → Apply filters',
       suggestions: [],
       organizer: {
         current: getOrganizerDescription(normalizedOrganizer),
@@ -217,7 +229,7 @@ const validateReport = async (req, res) => {
       recommendations.autoSwitch = recommendedViewType !== viewType;
       
       if (filterAnalysis.isMixed) {
-        recommendations.message = 'Mixed filter types detected. Custom view recommended.';
+        recommendations.message = 'Mixed filter types detected. Custom view recommended with organizer-first approach.';
         recommendations.suggestions.push('Consider using custom view for mixed traditional and advanced filters');
       } else if (filterAnalysis.hasAdvanced && viewType !== 'advanced') {
         recommendations.message = 'Advanced filters detected. Consider switching to advanced view.';
@@ -231,6 +243,10 @@ const validateReport = async (req, res) => {
       if (normalizedOrganizer.type === 'all_games') {
         recommendations.organizer.suggestions.push('Consider using "Last X Games" for recent performance analysis');
         recommendations.organizer.suggestions.push('Use "Home/Away" to analyze venue-specific performance');
+        recommendations.organizer.suggestions.push('Use "Game Range" to analyze specific periods of the season');
+      } else {
+        recommendations.organizer.suggestions.push('Results will show averages calculated over the specified game scope');
+        recommendations.organizer.suggestions.push('Filters are applied to these calculated averages, not individual games');
       }
       
       if (suggestions) {
@@ -246,7 +262,7 @@ const validateReport = async (req, res) => {
       }
     }
     
-    // Performance warnings
+    // Performance warnings with organizer considerations
     const warnings = [];
     if (filters && filters.length > 10) {
       warnings.push('Large number of filters may impact performance.');
@@ -264,6 +280,11 @@ const validateReport = async (req, res) => {
       warnings.push('Large game ranges may impact query performance.');
     }
     
+    // Add organizer-specific warnings about data expectations
+    if (normalizedOrganizer.type !== 'all_games') {
+      warnings.push(`Results will show averages over ${getOrganizerDescription(normalizedOrganizer)}, not season totals.`);
+    }
+    
     res.json({
       success: true,
       valid: issues.length === 0 && queryValid,
@@ -272,7 +293,8 @@ const validateReport = async (req, res) => {
       recommendations,
       query: {
         valid: queryValid,
-        error: queryError
+        error: queryError,
+        approach: 'organizer_first'
       },
       metadata: queryMetadata
     });
@@ -317,12 +339,12 @@ const previewReport = async (req, res) => {
     }
     
     // Generate a small preview (limit to 5 results)
+    console.log(`🔍 Generating preview with organizer: ${getOrganizerDescription(normalizedOrganizer)}`);
+    
     const queryResult = buildReportQuery(measure, filters, normalizedOrganizer, sortConfig, 5, viewType);
     const { sql, params, isAdvanced, isUnified, filterAnalysis, recommendedViewType, organizerDescription } = queryResult;
     
-    const result = isUnified 
-      ? await unifiedExecuteQuery(sql, params)
-      : await executeQuery(sql, params);
+    const result = await executeQuery(sql, params);
     
     res.json({
       success: true,
@@ -338,7 +360,8 @@ const previewReport = async (req, res) => {
         queryType: isUnified ? 'unified' : (isAdvanced ? 'advanced' : 'traditional'),
         recommendedViewType,
         filterAnalysis,
-        organizerApplied: normalizedOrganizer.type !== 'all_games'
+        organizerApplied: normalizedOrganizer.type !== 'all_games',
+        queryApproach: 'organizer_first'
       }
     });
     
@@ -376,6 +399,8 @@ const getQueryInfo = async (req, res) => {
       success: true,
       organizer: normalizedOrganizer,
       organizerDescription: getOrganizerDescription(normalizedOrganizer),
+      queryApproach: 'organizer_first',
+      workflow: 'Organizer defines scope → Calculate averages → Apply filters',
       ...metadata
     });
     
