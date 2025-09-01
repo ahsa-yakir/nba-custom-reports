@@ -1,8 +1,8 @@
 /**
- * Saved Reports controller for managing user's saved NBA reports
+ * Saved Reports controller for managing user's saved NBA reports - updated with organizer support
  */
 const { query } = require('../config/database');
-const { buildReportQuery, executeQuery: runQuery } = require('./reportController');
+const { getOrganizerDescription } = require('../utils/organizerBuilder');
 
 /**
  * Get saved reports for a dashboard
@@ -25,10 +25,10 @@ const getReportsForDashboard = async (req, res) => {
       });
     }
 
-    // Get reports
+    // Get reports (updated to include organizer)
     const reports = await query(`
       SELECT 
-        id, name, description, measure, filters, sort_config, view_type,
+        id, name, description, measure, filters, organizer, sort_config, view_type,
         is_favorite, view_count, last_viewed_at, created_at, updated_at,
         (cache_expires_at IS NOT NULL AND cache_expires_at > NOW()) as has_cached_data,
         (cached_results IS NOT NULL) as has_results_cached
@@ -47,6 +47,8 @@ const getReportsForDashboard = async (req, res) => {
         description: report.description,
         measure: report.measure,
         filters: report.filters,
+        organizer: report.organizer || { type: 'all_games' }, // Default for legacy reports
+        organizerDescription: getOrganizerDescription(report.organizer || { type: 'all_games' }),
         sortConfig: report.sort_config,
         viewType: report.view_type,
         isFavorite: report.is_favorite,
@@ -80,6 +82,7 @@ const saveReport = async (req, res) => {
       description, 
       measure, 
       filters, 
+      organizer, // New field
       sortConfig, 
       viewType = 'traditional',
       cacheResults = true 
@@ -106,6 +109,9 @@ const saveReport = async (req, res) => {
         message: 'At least one filter is required'
       });
     }
+
+    // Default organizer if not provided
+    const normalizedOrganizer = organizer || { type: 'all_games' };
 
     // Verify dashboard ownership
     const dashboardCheck = await query(
@@ -152,6 +158,7 @@ const saveReport = async (req, res) => {
             value2: filter.value2,
             values: filter.values
           })),
+          organizer: normalizedOrganizer, // Include organizer
           sortConfig: sortConfig || { column: null, direction: 'desc' },
           viewType: 'unified' // Always use unified for caching
         };
@@ -179,6 +186,7 @@ const saveReport = async (req, res) => {
           cachedMetadata = {
             count: reportResult.count,
             queryMetadata: reportResult.queryMetadata,
+            organizerDescription: reportResult.organizerDescription,
             generatedAt: new Date().toISOString()
           };
           
@@ -186,7 +194,7 @@ const saveReport = async (req, res) => {
           cacheExpiresAt = new Date();
           cacheExpiresAt.setHours(cacheExpiresAt.getHours() + 1);
           
-          console.log(`Report data cached: ${reportResult.count} results`);
+          console.log(`Report data cached: ${reportResult.count} results with organizer: ${reportResult.organizerDescription}`);
         }
       } catch (cacheError) {
         console.warn('Failed to cache report results:', cacheError.message);
@@ -194,12 +202,12 @@ const saveReport = async (req, res) => {
       }
     }
 
-    // Save the report
+    // Save the report (updated to include organizer)
     const savedReport = await query(`
       INSERT INTO saved_reports (
-        dashboard_id, user_id, name, description, measure, filters, 
+        dashboard_id, user_id, name, description, measure, filters, organizer,
         sort_config, view_type, cached_results, cached_metadata, cache_expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id, name, description, measure, view_type, created_at
     `, [
       dashboardId,
@@ -208,6 +216,7 @@ const saveReport = async (req, res) => {
       description?.trim(),
       measure,
       JSON.stringify(filters),
+      JSON.stringify(normalizedOrganizer), // Store organizer as JSON
       JSON.stringify(sortConfig || { column: null, direction: 'desc' }),
       viewType,
       cachedResults ? JSON.stringify(cachedResults) : null,
@@ -217,7 +226,7 @@ const saveReport = async (req, res) => {
 
     const report = savedReport.rows[0];
 
-    console.log(`Report saved: ${report.name} to dashboard ${dashboardCheck.rows[0].name} by user ${req.user.username}`);
+    console.log(`Report saved: ${report.name} with organizer ${getOrganizerDescription(normalizedOrganizer)} to dashboard ${dashboardCheck.rows[0].name} by user ${req.user.username}`);
 
     res.status(201).json({
       success: true,
@@ -228,6 +237,8 @@ const saveReport = async (req, res) => {
         description: report.description,
         measure: report.measure,
         viewType: report.view_type,
+        organizer: normalizedOrganizer,
+        organizerDescription: getOrganizerDescription(normalizedOrganizer),
         createdAt: report.created_at,
         hasCachedData: cachedResults !== null
       }
@@ -251,10 +262,10 @@ const getSavedReport = async (req, res) => {
     const userId = req.user.id;
     const { regenerate = false } = req.query;
 
-    // Get report details
+    // Get report details (updated to include organizer)
     const reportResult = await query(`
       SELECT 
-        sr.id, sr.name, sr.description, sr.measure, sr.filters, sr.sort_config, 
+        sr.id, sr.name, sr.description, sr.measure, sr.filters, sr.organizer, sr.sort_config, 
         sr.view_type, sr.is_favorite, sr.view_count, sr.cached_results, 
         sr.cached_metadata, sr.cache_expires_at, sr.created_at, sr.updated_at,
         d.name as dashboard_name, d.id as dashboard_id
@@ -275,22 +286,26 @@ const getSavedReport = async (req, res) => {
                           report.cache_expires_at && 
                           new Date(report.cache_expires_at) > new Date();
 
+    // Default organizer for legacy reports
+    const reportOrganizer = report.organizer || { type: 'all_games' };
+
     let reportData = null;
     let metadata = null;
 
     // Use cached data if available and valid, unless regeneration is requested
     if (!regenerate && hasValidCache) {
-      console.log(`Using cached data for report: ${report.name}`);
+      console.log(`Using cached data for report: ${report.name} with organizer: ${getOrganizerDescription(reportOrganizer)}`);
       reportData = report.cached_results;
       metadata = report.cached_metadata;
     } else {
       // Generate fresh data
-      console.log(`Generating fresh data for report: ${report.name}`);
+      console.log(`Generating fresh data for report: ${report.name} with organizer: ${getOrganizerDescription(reportOrganizer)}`);
       
       try {
         const reportConfig = {
           measure: report.measure,
           filters: report.filters,
+          organizer: reportOrganizer, // Include organizer in regeneration
           sortConfig: report.sort_config,
           viewType: 'unified' // Use unified to get comprehensive data
         };
@@ -316,6 +331,7 @@ const getSavedReport = async (req, res) => {
           metadata = {
             count: reportResult.count,
             queryMetadata: reportResult.queryMetadata,
+            organizerDescription: reportResult.organizerDescription,
             generatedAt: new Date().toISOString()
           };
 
@@ -368,6 +384,8 @@ const getSavedReport = async (req, res) => {
         description: report.description,
         measure: report.measure,
         filters: report.filters,
+        organizer: reportOrganizer,
+        organizerDescription: getOrganizerDescription(reportOrganizer),
         sortConfig: report.sort_config,
         viewType: report.view_type,
         isFavorite: report.is_favorite,
@@ -401,7 +419,7 @@ const updateSavedReport = async (req, res) => {
   try {
     const { reportId } = req.params;
     const userId = req.user.id;
-    const { name, description, filters, sortConfig, viewType } = req.body;
+    const { name, description, filters, organizer, sortConfig, viewType } = req.body;
 
     // Check if report exists and user owns it
     const existingReport = await query(`
@@ -433,38 +451,41 @@ const updateSavedReport = async (req, res) => {
       }
     }
 
-    // Clear cache if filters or config changed - FIXED: ensure boolean
-    const clearCache = !!(filters || sortConfig || viewType);
+    // Clear cache if filters, organizer, or config changed
+    const clearCache = !!(filters || organizer || sortConfig || viewType);
 
-    // Update report
+    // Update report (now includes organizer)
     const updatedReport = await query(`
       UPDATE saved_reports 
       SET 
         name = COALESCE($1, name),
         description = COALESCE($2, description),
         filters = COALESCE($3, filters),
-        sort_config = COALESCE($4, sort_config),
-        view_type = COALESCE($5, view_type),
-        cached_results = CASE WHEN $6 THEN NULL ELSE cached_results END,
-        cached_metadata = CASE WHEN $6 THEN NULL ELSE cached_metadata END,
-        cache_expires_at = CASE WHEN $6 THEN NULL ELSE cache_expires_at END,
+        organizer = COALESCE($4, organizer),
+        sort_config = COALESCE($5, sort_config),
+        view_type = COALESCE($6, view_type),
+        cached_results = CASE WHEN $7 THEN NULL ELSE cached_results END,
+        cached_metadata = CASE WHEN $7 THEN NULL ELSE cached_metadata END,
+        cache_expires_at = CASE WHEN $7 THEN NULL ELSE cache_expires_at END,
         updated_at = NOW()
-      WHERE id = $7 AND user_id = $8
-      RETURNING id, name, description, measure, view_type, updated_at
+      WHERE id = $8 AND user_id = $9
+      RETURNING id, name, description, measure, organizer, view_type, updated_at
     `, [
       name?.trim(),
       description?.trim(),
       filters ? JSON.stringify(filters) : null,
+      organizer ? JSON.stringify(organizer) : null,
       sortConfig ? JSON.stringify(sortConfig) : null,
       viewType,
-      clearCache, // Now guaranteed to be boolean
+      clearCache,
       reportId,
       userId
     ]);
 
     const report = updatedReport.rows[0];
+    const reportOrganizer = report.organizer || { type: 'all_games' };
 
-    console.log(`Report updated: ${report.name} by user ${req.user.username}`);
+    console.log(`Report updated: ${report.name} with organizer: ${getOrganizerDescription(reportOrganizer)} by user ${req.user.username}`);
 
     res.json({
       success: true,
@@ -474,6 +495,8 @@ const updateSavedReport = async (req, res) => {
         name: report.name,
         description: report.description,
         measure: report.measure,
+        organizer: reportOrganizer,
+        organizerDescription: getOrganizerDescription(reportOrganizer),
         viewType: report.view_type,
         updatedAt: report.updated_at
       }
@@ -498,7 +521,7 @@ const deleteSavedReport = async (req, res) => {
 
     // Check if report exists and user owns it
     const existingReport = await query(`
-      SELECT sr.id, sr.name, sr.dashboard_id
+      SELECT sr.id, sr.name, sr.organizer, sr.dashboard_id
       FROM saved_reports sr
       JOIN dashboards d ON sr.dashboard_id = d.id
       WHERE sr.id = $1 AND sr.user_id = $2
@@ -511,10 +534,12 @@ const deleteSavedReport = async (req, res) => {
       });
     }
 
+    const reportOrganizer = existingReport.rows[0].organizer || { type: 'all_games' };
+
     // Delete the report
     await query('DELETE FROM saved_reports WHERE id = $1 AND user_id = $2', [reportId, userId]);
 
-    console.log(`Report deleted: ${existingReport.rows[0].name} by user ${req.user.username}`);
+    console.log(`Report deleted: ${existingReport.rows[0].name} with organizer: ${getOrganizerDescription(reportOrganizer)} by user ${req.user.username}`);
 
     res.json({
       success: true,
@@ -540,7 +565,7 @@ const toggleFavorite = async (req, res) => {
 
     // Check if report exists and user owns it
     const existingReport = await query(`
-      SELECT sr.id, sr.name, sr.is_favorite
+      SELECT sr.id, sr.name, sr.is_favorite, sr.organizer
       FROM saved_reports sr
       JOIN dashboards d ON sr.dashboard_id = d.id
       WHERE sr.id = $1 AND sr.user_id = $2
@@ -555,6 +580,7 @@ const toggleFavorite = async (req, res) => {
 
     const currentFavorite = existingReport.rows[0].is_favorite;
     const newFavorite = !currentFavorite;
+    const reportOrganizer = existingReport.rows[0].organizer || { type: 'all_games' };
 
     // Toggle favorite
     await query(
@@ -562,7 +588,7 @@ const toggleFavorite = async (req, res) => {
       [newFavorite, reportId]
     );
 
-    console.log(`Report ${newFavorite ? 'favorited' : 'unfavorited'}: ${existingReport.rows[0].name} by user ${req.user.username}`);
+    console.log(`Report ${newFavorite ? 'favorited' : 'unfavorited'}: ${existingReport.rows[0].name} with organizer: ${getOrganizerDescription(reportOrganizer)} by user ${req.user.username}`);
 
     res.json({
       success: true,
@@ -589,7 +615,7 @@ const getRecentReports = async (req, res) => {
 
     const recentReports = await query(`
       SELECT 
-        sr.id, sr.name, sr.description, sr.measure, sr.view_type, 
+        sr.id, sr.name, sr.description, sr.measure, sr.organizer, sr.view_type, 
         sr.is_favorite, sr.view_count, sr.last_viewed_at, sr.created_at,
         d.name as dashboard_name, d.id as dashboard_id,
         (sr.cache_expires_at IS NOT NULL AND sr.cache_expires_at > NOW()) as has_cached_data
@@ -602,20 +628,25 @@ const getRecentReports = async (req, res) => {
 
     res.json({
       success: true,
-      recentReports: recentReports.rows.map(report => ({
-        id: report.id,
-        name: report.name,
-        description: report.description,
-        measure: report.measure,
-        viewType: report.view_type,
-        isFavorite: report.is_favorite,
-        viewCount: report.view_count,
-        lastViewedAt: report.last_viewed_at,
-        createdAt: report.created_at,
-        dashboardName: report.dashboard_name,
-        dashboardId: report.dashboard_id,
-        hasCachedData: report.has_cached_data
-      }))
+      recentReports: recentReports.rows.map(report => {
+        const reportOrganizer = report.organizer || { type: 'all_games' };
+        return {
+          id: report.id,
+          name: report.name,
+          description: report.description,
+          measure: report.measure,
+          organizer: reportOrganizer,
+          organizerDescription: getOrganizerDescription(reportOrganizer),
+          viewType: report.view_type,
+          isFavorite: report.is_favorite,
+          viewCount: report.view_count,
+          lastViewedAt: report.last_viewed_at,
+          createdAt: report.created_at,
+          dashboardName: report.dashboard_name,
+          dashboardId: report.dashboard_id,
+          hasCachedData: report.has_cached_data
+        };
+      })
     });
 
   } catch (error) {

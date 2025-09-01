@@ -1,5 +1,5 @@
 /**
- * Builds WHERE clauses from filter arrays - updated to use ValueConverter
+ * Builds WHERE clauses from filter arrays - updated to support organizer parameter offsets
  */
 const { getColumnName } = require('./metadata');
 const { ValueConverter } = require('./valueConverter');
@@ -59,14 +59,14 @@ const buildSingleCondition = (filter, measure, paramIndex, isAdvanced = false) =
   }
 };
 
-const buildWhereClause = (filters, measure, isAdvanced = false) => {
+const buildWhereClause = (filters, measure, isAdvanced = false, startParamIndex = 1) => {
   if (!filters || filters.length === 0) {
     return { whereClause: '', params: [] };
   }
   
   const conditions = [];
   const params = [];
-  let paramIndex = 1;
+  let paramIndex = startParamIndex;
   
   filters.forEach(filter => {
     try {

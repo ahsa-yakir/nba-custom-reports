@@ -1,6 +1,8 @@
 /**
- * Filter validation and type checking utilities
+ * Filter validation and type checking utilities - updated with organizer support
  */
+
+const { validateOrganizer } = require('./organizerBuilder');
 
 const validateFilters = (filters, measure) => {
   const errors = [];
@@ -37,6 +39,47 @@ const validateFilters = (filters, measure) => {
       errors.push(`Filter ${index + 1}: '${filter.type}' is not a valid filter type for ${measure}`);
     }
   });
+  
+  return errors;
+};
+
+// Enhanced validation function that includes organizer validation
+const validateReportConfiguration = (measure, filters, organizer, sortConfig) => {
+  const errors = [];
+  
+  // Validate measure
+  if (!measure || !['Players', 'Teams'].includes(measure)) {
+    errors.push('Invalid or missing measure. Must be "Players" or "Teams"');
+  }
+  
+  // Validate filters
+  if (filters) {
+    const filterErrors = validateFilters(filters, measure);
+    errors.push(...filterErrors);
+  } else {
+    errors.push('Filters are required');
+  }
+  
+  // Validate organizer (now always required)
+  const normalizedOrganizer = organizer || { type: 'all_games' };
+  const organizerErrors = validateOrganizer(normalizedOrganizer);
+  if (organizerErrors.length > 0) {
+    errors.push(...organizerErrors.map(err => `Organizer: ${err}`));
+  }
+  
+  // Validate sort config
+  if (sortConfig) {
+    if (typeof sortConfig !== 'object') {
+      errors.push('Sort configuration must be an object');
+    } else {
+      if (sortConfig.column && typeof sortConfig.column !== 'string') {
+        errors.push('Sort column must be a string');
+      }
+      if (sortConfig.direction && !['asc', 'desc'].includes(sortConfig.direction.toLowerCase())) {
+        errors.push('Sort direction must be "asc" or "desc"');
+      }
+    }
+  }
   
   return errors;
 };
@@ -118,11 +161,61 @@ const getFilterRequirements = (operator) => {
   }
 };
 
+// New function to get filter and organizer compatibility
+const getFilterOrganizerCompatibility = (filters, organizer) => {
+  const warnings = [];
+  const suggestions = [];
+  
+  if (!organizer || organizer.type === 'all_games') {
+    return { warnings, suggestions, compatible: true };
+  }
+  
+  // Check for filters that might not make sense with certain organizers
+  const hasTeamFilter = filters.some(f => f.type === 'Team');
+  const hasAgeFilter = filters.some(f => f.type === 'Age');
+  
+  // Team-specific organizers
+  if (organizer.type === 'home_away') {
+    if (!hasTeamFilter) {
+      suggestions.push('Consider adding a team filter when using home/away organizer for more focused analysis');
+    }
+  }
+  
+  // Game range organizers
+  if (organizer.type === 'last_games' || organizer.type === 'game_range') {
+    if (hasAgeFilter) {
+      warnings.push('Age filters with game range organizers may produce unexpected results as age is season-level data');
+    }
+    
+    const hasSeasonLevelFilters = filters.some(f => ['Team', 'Age'].includes(f.type));
+    if (hasSeasonLevelFilters) {
+      suggestions.push('Game-based organizers work best with performance-based filters (PTS, REB, AST, etc.)');
+    }
+  }
+  
+  // Performance considerations
+  if (organizer.type === 'last_games' && organizer.value > 30) {
+    warnings.push('Large "last games" values may impact query performance');
+  }
+  
+  if (organizer.type === 'game_range' && (organizer.to - organizer.from) > 40) {
+    warnings.push('Large game ranges may impact query performance');
+  }
+  
+  return {
+    warnings,
+    suggestions,
+    compatible: warnings.length === 0
+  };
+};
+
 module.exports = {
   validateFilters,
+  validateReportConfiguration, // New comprehensive validation function
   hasAdvancedFilters,
   getAvailableFilterTypes,
   isValidOperator,
   isValidMeasure,
-  getFilterRequirements
+  getFilterRequirements,
+  getFilterOrganizerCompatibility // New compatibility check function
 };

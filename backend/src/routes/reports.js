@@ -1,5 +1,5 @@
 /**
- * Enhanced Reports API routes with unified query support
+ * Enhanced Reports API routes with organizer and unified query support
  */
 const express = require('express');
 const router = express.Router();
@@ -13,15 +13,16 @@ const healthController = require('../controllers/healthController');
 router.post('/generate', reportController.generateReport);
 router.post('/validate', reportController.validateReport);
 router.post('/preview', reportController.previewReport);
-router.post('/query-info', reportController.getQueryInfo); // New endpoint for query analysis
+router.post('/query-info', reportController.getQueryInfo);
 
-// Data fetching routes (unchanged)
+// Data fetching routes (updated with organizer support)
 router.get('/filters/:measure', dataController.getFilterTypes);
+router.get('/organizers', dataController.getOrganizerTypes); // New endpoint for organizer types
 router.get('/teams', dataController.getTeams);
 router.get('/players', dataController.getPlayers);
 router.get('/seasons', dataController.getSeasons);
-router.get('/sample/:measure', dataController.getSampleData);
-router.get('/overview', dataController.getDataOverview);
+router.get('/sample/:measure', dataController.getSampleData); // Updated to support organizer parameter
+router.get('/overview', dataController.getDataOverview); // Updated with organizer statistics
 
 // Health and monitoring routes (unchanged)
 router.get('/test', healthController.testConnection);
