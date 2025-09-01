@@ -9,6 +9,7 @@ import ConnectionStatus from './components/ConnectionStatus';
 import ErrorDisplay from './components/ErrorDisplay';
 import MeasureSection from './components/MeasureSection';
 import FilterSection from './components/FilterSection';
+import OrganizerSection from './components/OrganizerSection';
 import GenerateReportButton from './components/GenerateReportButton';
 import RequirementsWarning from './components/RequirementsWarning';
 import ReportResults from './components/ReportResults';
@@ -23,10 +24,11 @@ const CustomReportsBuilder = () => {
   const dashboardName = location.state?.dashboardName;
   const isInDashboard = !!(dashboardId && user);
 
-  // Consolidated report state
+  // Consolidated report state - NOW INCLUDES ORGANIZER
   const [reportState, setReportState] = useState({
     measure: '',
     filters: [],
+    organizer: { type: 'all_games' }, // Default organizer
     sortConfig: { column: null, direction: 'desc' },
     viewType: 'traditional',
     lastViewType: null
@@ -108,16 +110,17 @@ const CustomReportsBuilder = () => {
     }
   }, [isInDashboard, dashboardId, authService]);
 
-  // Check if current config needs new data fetch
+  // Check if current config needs new data fetch - NOW INCLUDES ORGANIZER
   const needsNewFetch = useMemo(() => {
     if (!dataCache.lastFetchConfig) return true;
     
-    const { measure, filters } = reportState;
+    const { measure, filters, organizer } = reportState;
     const lastConfig = dataCache.lastFetchConfig;
     
     return (
       measure !== lastConfig.measure ||
       JSON.stringify(filters) !== JSON.stringify(lastConfig.filters) ||
+      JSON.stringify(organizer) !== JSON.stringify(lastConfig.organizer) ||
       dataCache.isStale
     );
   }, [reportState, dataCache.lastFetchConfig, dataCache.isStale]);
@@ -203,6 +206,7 @@ const CustomReportsBuilder = () => {
     }
   };
 
+  // UPDATED: Generate report now includes organizer
   const generateReport = async () => {
     if (!reportState.measure || reportState.filters.length === 0) return;
 
@@ -211,7 +215,8 @@ const CustomReportsBuilder = () => {
     try {
       console.log('Generating unified report...', { 
         measure: reportState.measure, 
-        filters: reportState.filters
+        filters: reportState.filters,
+        organizer: reportState.organizer
       });
 
       const reportConfig = {
@@ -223,6 +228,7 @@ const CustomReportsBuilder = () => {
           value2: filter.value2,
           values: filter.values
         })),
+        organizer: reportState.organizer, // Include organizer
         sortConfig: reportState.sortConfig.column ? reportState.sortConfig : null,
         viewType: 'unified'
       };
@@ -230,7 +236,7 @@ const CustomReportsBuilder = () => {
       const response = await apiService.generateReport(reportConfig);
       
       if (response.success && response.results) {
-        console.log(`Unified report generated: ${response.count} results`);
+        console.log(`Unified report generated: ${response.count} results with organizer: ${response.organizerDescription || 'All Games'}`);
         
         const formattedData = formatUnifiedResults(
           response.results, 
@@ -244,7 +250,8 @@ const CustomReportsBuilder = () => {
           apiResponse: response,
           lastFetchConfig: {
             measure: reportState.measure,
-            filters: reportState.filters
+            filters: reportState.filters,
+            organizer: reportState.organizer // Include organizer in cache config
           },
           isStale: false
         });
@@ -272,6 +279,7 @@ const CustomReportsBuilder = () => {
     }
   };
 
+  // UPDATED: Save report now includes organizer
   const handleSaveReport = async () => {
     if (!isInDashboard || !saveState.saveName.trim()) return;
 
@@ -283,6 +291,7 @@ const CustomReportsBuilder = () => {
         description: saveState.saveDescription.trim() || null,
         measure: reportState.measure,
         filters: reportState.filters,
+        organizer: reportState.organizer, // Include organizer
         sortConfig: reportState.sortConfig,
         viewType: reportState.viewType
       };
@@ -300,12 +309,14 @@ const CustomReportsBuilder = () => {
           description: response.report.description,
           measure: response.report.measure,
           viewType: response.report.viewType,
+          organizerDescription: response.report.organizerDescription,
           isFavorite: false,
           viewCount: 0,
           createdAt: response.report.createdAt,
           hasCachedData: response.report.hasCachedData,
-          // Add filters for edit functionality
+          // Add filters and organizer for edit functionality
           filters: reportState.filters,
+          organizer: reportState.organizer,
           sortConfig: reportState.sortConfig
         };
 
@@ -373,6 +384,8 @@ const CustomReportsBuilder = () => {
           description: report.description,
           measure: report.measure,
           filters: report.filters,
+          organizer: report.organizer || { type: 'all_games' }, // Include organizer with fallback
+          organizerDescription: report.organizerDescription || 'All Games',
           sortConfig: report.sortConfig,
           viewType: report.viewType,
           data: formattedData,
@@ -404,6 +417,7 @@ const CustomReportsBuilder = () => {
     setExpandedReports(newExpandedReports);
   };
 
+  // UPDATED: Edit saved report now includes organizer
   const handleEditSavedReport = async (report) => {
     try {
       // Store original state so we can restore if user cancels
@@ -417,6 +431,7 @@ const CustomReportsBuilder = () => {
       setReportState({
         measure: report.measure,
         filters: report.filters,
+        organizer: report.organizer || { type: 'all_games' }, // Include organizer with fallback
         sortConfig: report.sortConfig,
         viewType: report.viewType,
         lastViewType: report.viewType
@@ -437,7 +452,8 @@ const CustomReportsBuilder = () => {
           apiResponse: response.metadata,
           lastFetchConfig: {
             measure: report.measure,
-            filters: report.filters
+            filters: report.filters,
+            organizer: report.organizer || { type: 'all_games' } // Include organizer with fallback
           },
           isStale: false
         });
@@ -456,6 +472,7 @@ const CustomReportsBuilder = () => {
     }
   };
 
+  // UPDATED: Save edited report now includes organizer
   const handleSaveEditedReport = async () => {
     if (!editState.editingReportId) return;
 
@@ -467,6 +484,7 @@ const CustomReportsBuilder = () => {
         description: saveState.saveDescription.trim() || null,
         measure: reportState.measure,
         filters: reportState.filters,
+        organizer: reportState.organizer, // Include organizer
         sortConfig: reportState.sortConfig,
         viewType: reportState.viewType
       };
@@ -487,7 +505,8 @@ const CustomReportsBuilder = () => {
                   name: response.report.name,
                   description: response.report.description,
                   measure: response.report.measure,
-                  viewType: response.report.viewType
+                  viewType: response.report.viewType,
+                  organizerDescription: response.report.organizerDescription
                 }
               : r
           ),
@@ -506,6 +525,7 @@ const CustomReportsBuilder = () => {
             description: response.report.description,
             measure: response.report.measure,
             filters: reportState.filters,
+            organizer: reportState.organizer, // Include organizer
             sortConfig: reportState.sortConfig,
             viewType: reportState.viewType
           });
@@ -549,6 +569,7 @@ const CustomReportsBuilder = () => {
     console.log('Edit cancelled, restored original state');
   };
 
+  // UPDATED: Refresh expanded report now includes organizer
   const handleRefreshExpandedReport = async (reportId) => {
     const newLoadingReports = new Set(loadingReports);
     newLoadingReports.add(reportId);
@@ -568,6 +589,7 @@ const CustomReportsBuilder = () => {
           value2: filter.value2,
           values: filter.values
         })),
+        organizer: expandedReport.organizer || { type: 'all_games' }, // Include organizer
         sortConfig: expandedReport.sortConfig,
         viewType: 'unified'
       };
@@ -706,6 +728,17 @@ const CustomReportsBuilder = () => {
 
   const handleSortChange = (sortConfig) => {
     setReportState(prev => ({ ...prev, sortConfig }));
+  };
+
+  // UPDATED: Handle organizer change
+  const handleOrganizerChange = (organizer) => {
+    setReportState(prev => ({ 
+      ...prev, 
+      organizer,
+      lastViewType: null
+    }));
+    
+    setDataCache(prev => ({ ...prev, isStale: true }));
   };
 
   const handleFiltersChange = (filters) => {
@@ -847,7 +880,7 @@ const CustomReportsBuilder = () => {
                         </button>
                       </div>
 
-                      <div className="flex items-start justify-between mb-2 pr-16"> {/* Increased padding for two buttons */}
+                      <div className="flex items-start justify-between mb-2 pr-16">
                         <h4 className="font-medium text-gray-900 truncate">{report.name}</h4>
                         <div className="flex items-center space-x-1 flex-shrink-0">
                           {isLoading && (
@@ -872,6 +905,11 @@ const CustomReportsBuilder = () => {
                       <div className="flex items-center justify-between text-xs text-gray-500">
                         <span className="bg-gray-100 px-2 py-1 rounded">{report.measure}</span>
                         <span>{report.viewCount} views</span>
+                      </div>
+                      
+                      {/* Organizer info */}
+                      <div className="mt-2 text-xs text-blue-600">
+                        📊 {report.organizerDescription || 'All Games'}
                       </div>
                       
                       {report.hasCachedData && (
@@ -937,6 +975,9 @@ const CustomReportsBuilder = () => {
                                   <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">
                                     {report.viewType}
                                   </span>
+                                  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs">
+                                    📊 {report.organizerDescription}
+                                  </span>
                                   {report.hasCache && (
                                     <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
                                       Cached
@@ -977,6 +1018,7 @@ const CustomReportsBuilder = () => {
                             <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
                               <div className="flex items-center space-x-4">
                                 <span>{report.filters.length} filters applied</span>
+                                <span>📊 {report.organizerDescription || 'All Games'}</span>
                                 <span>{sortedData.length} results</span>
                                 {report.lastLoaded && (
                                   <span>Updated: {new Date(report.lastLoaded).toLocaleTimeString()}</span>
@@ -1004,6 +1046,7 @@ const CustomReportsBuilder = () => {
                                   filters={report.filters}
                                   detectedViewType={report.viewType}
                                   needsNewFetch={false}
+                                  organizer={report.organizer}
                                   onViewTypeChange={(newViewType) => {
                                     const newExpandedReports = new Map(expandedReports);
                                     newExpandedReports.set(report.id, {
@@ -1038,12 +1081,17 @@ const CustomReportsBuilder = () => {
             </div>
           )}
           
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+          {/* UPDATED: Main report builder sections with organizer */}
+          <div className="grid grid-cols-1 lg:grid-cols-6 gap-6 items-start">
             <div className="lg:col-span-1">
               <MeasureSection
                 measure={reportState.measure}
                 onMeasureChange={(measure) => {
-                  setReportState(prev => ({ ...prev, measure }));
+                  setReportState(prev => ({ 
+                    ...prev, 
+                    measure,
+                    organizer: { type: 'all_games' } // Reset organizer when measure changes
+                  }));
                   setDataCache(prev => ({ ...prev, isStale: true }));
                 }}
                 disabled={uiState.connectionStatus === 'failed'}
@@ -1057,6 +1105,16 @@ const CustomReportsBuilder = () => {
                 teams={uiState.teams}
                 connectionStatus={uiState.connectionStatus}
                 onFiltersChange={handleFiltersChange}
+              />
+            </div>
+
+            <div className="lg:col-span-2">
+              <OrganizerSection
+                measure={reportState.measure}
+                organizer={reportState.organizer}
+                connectionStatus={uiState.connectionStatus}
+                onOrganizerChange={handleOrganizerChange}
+                disabled={uiState.connectionStatus === 'failed'}
               />
             </div>
           </div>
@@ -1074,6 +1132,7 @@ const CustomReportsBuilder = () => {
             connectionStatus={uiState.connectionStatus}
             measure={reportState.measure}
             filtersCount={reportState.filters.length}
+            organizer={reportState.organizer}
           />
 
           <ReportResults
@@ -1086,6 +1145,7 @@ const CustomReportsBuilder = () => {
             filters={reportState.filters}
             detectedViewType={detectedViewType}
             needsNewFetch={needsNewFetch}
+            organizer={reportState.organizer}
             onViewTypeChange={handleViewChange}
             onSortChange={handleSortChange}
             onFiltersChange={handleFiltersChange}
@@ -1151,6 +1211,10 @@ const CustomReportsBuilder = () => {
                 <ul className="text-xs text-gray-500 space-y-1">
                   <li>• Measure: {reportState.measure}</li>
                   <li>• Filters: {reportState.filters.length}</li>
+                  <li>• Organizer: {reportState.organizer?.type === 'all_games' ? 'All Games' : 
+                    reportState.organizer?.type === 'last_games' ? `Last ${reportState.organizer.value} Games` :
+                    reportState.organizer?.type === 'game_range' ? `Games ${reportState.organizer.from}-${reportState.organizer.to}` :
+                    reportState.organizer?.type === 'home_away' ? `${reportState.organizer.gameType} Games` : 'Unknown'}</li>
                   <li>• View: {reportState.viewType}</li>
                   <li>• Results: {displayData.length} rows</li>
                 </ul>
