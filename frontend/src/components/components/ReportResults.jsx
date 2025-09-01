@@ -16,6 +16,7 @@ const ReportResults = ({
   filters,
   detectedViewType,
   needsNewFetch,
+  organizer, // NEW: Accept organizer as direct prop
   onViewTypeChange, 
   onSortChange,
   onFiltersChange,
@@ -23,6 +24,24 @@ const ReportResults = ({
   canSave = false,
   onSaveReport
 }) => {
+  // Helper function to get organizer description
+  const getOrganizerDescription = (organizer) => {
+    if (!organizer || organizer.type === 'all_games') {
+      return 'All Games';
+    }
+    
+    switch (organizer.type) {
+      case 'last_games':
+        return `Last ${organizer.value || 0} Games`;
+      case 'game_range':
+        return `Games ${organizer.from || 0} to ${organizer.to || 0}`;
+      case 'home_away':
+        return `${organizer.gameType === 'home' ? 'Home' : 'Away'} Games`;
+      default:
+        return 'Custom Scope';
+    }
+  };
+
   // Get columns for current view
   const columns = useMemo(() => {
     return getColumnsForView(viewType, measure, rawApiResponse, filters);
@@ -135,6 +154,15 @@ const ReportResults = ({
         isLoading={isLoading}
       />
 
+      {/* NEW: Organizer scope display - right below the view selector */}
+      <div className="mb-4 flex items-center space-x-2">
+        <span className="text-sm text-gray-500">Scope:</span>
+        <div className="flex items-center space-x-1 bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
+          <span>📊</span>
+          <span>{getOrganizerDescription(organizer || rawApiResponse?.organizer)}</span>
+        </div>
+      </div>
+
       {/* Data validation warnings */}
       {dataValidation.length > 0 && (
         <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -179,6 +207,9 @@ const ReportResults = ({
             Data source: Unified query combining traditional and advanced statistics
             {rawApiResponse.queryMetadata.hasAdvancedData && (
               <span className="ml-2">• Advanced stats available</span>
+            )}
+            {rawApiResponse.organizerDescription && (
+              <span className="ml-2">• Game scope: {rawApiResponse.organizerDescription}</span>
             )}
           </div>
         </div>

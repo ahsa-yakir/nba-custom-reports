@@ -5,7 +5,8 @@ const RequirementsWarning = ({
   isLoading, 
   connectionStatus, 
   measure, 
-  filtersCount 
+  filtersCount,
+  organizer // NEW: Added organizer prop
 }) => {
   if (canGenerate || isLoading) return null;
 
@@ -25,6 +26,24 @@ const RequirementsWarning = ({
     }
     
     return missing;
+  };
+
+  // NEW: Function to get organizer description
+  const getOrganizerInfo = () => {
+    if (!organizer || organizer.type === 'all_games') {
+      return 'Using season averages across all games';
+    }
+    
+    switch (organizer.type) {
+      case 'last_games':
+        return `Using averages from last ${organizer.value || 0} games`;
+      case 'game_range':
+        return `Using averages from games ${organizer.from || 0} to ${organizer.to || 0}`;
+      case 'home_away':
+        return `Using averages from ${organizer.gameType || 'unknown'} games only`;
+      default:
+        return 'Using custom game scope';
+    }
   };
 
   const missingRequirements = getMissingRequirements();
@@ -47,6 +66,12 @@ const RequirementsWarning = ({
                 <li key={index}>{requirement}</li>
               ))}
             </ul>
+            {/* NEW: Show organizer info when measure is selected */}
+            {measure && organizer && (
+              <div className="mt-3 p-2 bg-yellow-100 rounded text-xs">
+                <strong>Current Organizer:</strong> {getOrganizerInfo()}
+              </div>
+            )}
           </div>
         </div>
       </div>
