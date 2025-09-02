@@ -15,17 +15,17 @@ A full-stack NBA analytics platform with real-time data pipeline and custom repo
 
 ```bash
 # 1. Start database
-docker compose up -d postgres
+docker-compose up -d postgres
 
 # 2. Setup database schema  
-docker compose --profile setup run --rm backend-setup
+docker-compose --profile setup run --rm backend-setup
 
 # 3. Load NBA data (teams, players, recent games)
-docker compose --profile etl run --rm etl python nba_pipeline.py setup
-docker compose --profile etl run --rm etl python nba_pipeline.py load 2025-01-15
+docker-compose --profile etl run --rm etl python nba_pipeline.py setup
+docker-compose --profile etl run --rm etl python nba_pipeline.py load 2025-01-15
 
 # 4. Start application
-docker compose up backend frontend
+docker-compose up backend frontend
 ```
 
 **Access:** Frontend at http://localhost:3000, API at http://localhost:3001
@@ -34,13 +34,13 @@ docker compose up backend frontend
 
 ```bash
 # Load specific date
-docker compose --profile etl run --rm etl python nba_pipeline.py load 2025-01-15
+docker-compose --profile etl run --rm etl python nba_pipeline.py load 2025-01-15
 
 # Load date range  
-docker compose --profile etl run --rm etl python nba_pipeline.py load 2025-01-10 to 2025-01-15
+docker-compose --profile etl run --rm etl python nba_pipeline.py load 2025-01-10 to 2025-01-15
 
 # Load career statistics
-docker compose --profile etl run --rm etl python nba_pipeline.py load-career-active
+docker-compose --profile etl run --rm etl python nba_pipeline.py load-career-active
 ```
 
 ## 🛠️ Tech Stack
