@@ -1,6 +1,6 @@
 /**
- * Enhanced organizer builder for handling game scope with subquery approach
- * Now generates subqueries to properly scope games before aggregation
+ * Enhanced organizer builder with season-position based logic and date organizers
+ * Now supports: all_games, last_games (fixed), game_range, home_away, last_period, date_range
  */
 
 const buildOrganizerSubquery = (organizer, measure) => {
@@ -19,54 +19,43 @@ const buildOrganizerSubquery = (organizer, measure) => {
     };
   }
 
-  const { type, value, from, to, gameType } = organizer;
+  const { type, value, from, to, gameType, period, fromDate, toDate } = organizer;
 
   switch (type) {
     case 'last_games':
+      // FIXED: Season-position based instead of player-specific
       if (!value || value <= 0) {
         throw new Error('Last games organizer requires a positive value');
       }
 
       return {
         subquery: `
+          WITH season_position AS (
+            SELECT MAX(GREATEST(
+              COALESCE(home_team_game_number, 0),
+              COALESCE(away_team_game_number, 0)
+            )) as current_game
+            FROM games 
+            WHERE game_type = 'regular'
+          )
           SELECT 
-            ${measure === 'Players' ? 'pgs.player_id' : 'team_entity_games.team_id'} as entity_id,
-            ${measure === 'Players' ? 'pgs.game_id' : 'team_entity_games.game_id'} as game_id
-          FROM (
-            ${measure === 'Players' 
-              ? `
-                SELECT 
-                  pgs.player_id,
-                  pgs.game_id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY pgs.player_id 
-                    ORDER BY g.game_date DESC, g.id DESC
-                  ) as game_rank
-                FROM player_game_stats pgs
-                JOIN games g ON pgs.game_id = g.id
-                WHERE g.game_type = 'regular'
-              `
-              : `
-                SELECT 
-                  team_id,
-                  game_id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY team_id 
-                    ORDER BY g.game_date DESC, g.id DESC
-                  ) as game_rank
-                FROM (
-                  SELECT tgs.team_id, tgs.game_id
-                  FROM team_game_stats tgs
-                  JOIN games g ON tgs.game_id = g.id
-                  WHERE g.game_type = 'regular'
-                ) team_games
-                JOIN games g ON team_games.game_id = g.id
-              `
-            }
-          ) ${measure === 'Players' ? 'pgs' : 'team_entity_games'}
-          WHERE game_rank <= ${value}
+            ${measure === 'Players' ? 'pgs.player_id' : 'tgs.team_id'} as entity_id,
+            ${measure === 'Players' ? 'pgs.game_id' : 'tgs.game_id'} as game_id
+          FROM ${measure === 'Players' ? 'player_game_stats pgs' : 'team_game_stats tgs'}
+          JOIN games g ON ${measure === 'Players' ? 'pgs' : 'tgs'}.game_id = g.id
+          CROSS JOIN season_position sp
+          WHERE g.game_type = 'regular'
+            AND (
+              (${measure === 'Players' ? 'pgs.team_id = g.home_team_id' : 'tgs.team_id = g.home_team_id'} 
+               AND g.home_team_game_number > (sp.current_game - ${value})
+               AND g.home_team_game_number <= sp.current_game)
+              OR
+              (${measure === 'Players' ? 'pgs.team_id = g.away_team_id' : 'tgs.team_id = g.away_team_id'}
+               AND g.away_team_game_number > (sp.current_game - ${value})
+               AND g.away_team_game_number <= sp.current_game)
+            )
         `,
-        description: `Last ${value} Games`
+        description: `Last ${value} Games (Season Position)`
       };
 
     case 'game_range':
@@ -77,41 +66,18 @@ const buildOrganizerSubquery = (organizer, measure) => {
       return {
         subquery: `
           SELECT 
-            ${measure === 'Players' ? 'pgs.player_id' : 'team_entity_games.team_id'} as entity_id,
-            ${measure === 'Players' ? 'pgs.game_id' : 'team_entity_games.game_id'} as game_id
-          FROM (
-            ${measure === 'Players'
-              ? `
-                SELECT 
-                  pgs.player_id,
-                  pgs.game_id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY pgs.player_id 
-                    ORDER BY g.game_date ASC, g.id ASC
-                  ) as game_number
-                FROM player_game_stats pgs
-                JOIN games g ON pgs.game_id = g.id
-                WHERE g.game_type = 'regular'
-              `
-              : `
-                SELECT 
-                  team_id,
-                  game_id,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY team_id 
-                    ORDER BY g.game_date ASC, g.id ASC
-                  ) as game_number
-                FROM (
-                  SELECT tgs.team_id, tgs.game_id
-                  FROM team_game_stats tgs
-                  JOIN games g ON tgs.game_id = g.id
-                  WHERE g.game_type = 'regular'
-                ) team_games
-                JOIN games g ON team_games.game_id = g.id
-              `
-            }
-          ) ${measure === 'Players' ? 'pgs' : 'team_entity_games'}
-          WHERE game_number BETWEEN ${from} AND ${to}
+            ${measure === 'Players' ? 'pgs.player_id' : 'tgs.team_id'} as entity_id,
+            ${measure === 'Players' ? 'pgs.game_id' : 'tgs.game_id'} as game_id
+          FROM ${measure === 'Players' ? 'player_game_stats pgs' : 'team_game_stats tgs'}
+          JOIN games g ON ${measure === 'Players' ? 'pgs' : 'tgs'}.game_id = g.id
+          WHERE g.game_type = 'regular'
+            AND (
+              (${measure === 'Players' ? 'pgs.team_id = g.home_team_id' : 'tgs.team_id = g.home_team_id'} 
+               AND g.home_team_game_number BETWEEN ${from} AND ${to})
+              OR
+              (${measure === 'Players' ? 'pgs.team_id = g.away_team_id' : 'tgs.team_id = g.away_team_id'}
+               AND g.away_team_game_number BETWEEN ${from} AND ${to})
+            )
         `,
         description: `Games ${from} to ${to}`
       };
@@ -137,6 +103,82 @@ const buildOrganizerSubquery = (organizer, measure) => {
         description: `${gameType.charAt(0).toUpperCase() + gameType.slice(1)} Games`
       };
 
+    case 'last_period':
+      // NEW: Last X days/weeks/months from latest game date
+      if (!period || !['days', 'weeks', 'months'].includes(period) || !value || value <= 0) {
+        throw new Error('Last period organizer requires valid period (days/weeks/months) and positive value');
+      }
+
+      let intervalClause;
+      let periodLabel;
+      
+      switch (period) {
+        case 'days':
+          intervalClause = `INTERVAL '${value} days'`;
+          periodLabel = value === 1 ? 'Day' : 'Days';
+          break;
+        case 'weeks':
+          intervalClause = `INTERVAL '${value} weeks'`;
+          periodLabel = value === 1 ? 'Week' : 'Weeks';
+          break;
+        case 'months':
+          intervalClause = `INTERVAL '${value} months'`;
+          periodLabel = value === 1 ? 'Month' : 'Months';
+          break;
+      }
+
+      return {
+        subquery: `
+          WITH latest_game_date AS (
+            SELECT MAX(game_date) as max_date
+            FROM games 
+            WHERE game_type = 'regular'
+          )
+          SELECT 
+            ${measure === 'Players' ? 'pgs.player_id' : 'tgs.team_id'} as entity_id,
+            ${measure === 'Players' ? 'pgs.game_id' : 'tgs.game_id'} as game_id
+          FROM ${measure === 'Players' ? 'player_game_stats pgs' : 'team_game_stats tgs'}
+          JOIN games g ON ${measure === 'Players' ? 'pgs' : 'tgs'}.game_id = g.id
+          CROSS JOIN latest_game_date lgd
+          WHERE g.game_type = 'regular'
+            AND g.game_date > (lgd.max_date - ${intervalClause})
+            AND g.game_date <= lgd.max_date
+        `,
+        description: `Last ${value} ${periodLabel}`
+      };
+
+    case 'date_range':
+      // NEW: Specific date range
+      if (!fromDate || !toDate) {
+        throw new Error('Date range organizer requires both fromDate and toDate');
+      }
+
+      // Validate date format (basic check)
+      const fromDateObj = new Date(fromDate);
+      const toDateObj = new Date(toDate);
+      
+      if (isNaN(fromDateObj.getTime()) || isNaN(toDateObj.getTime())) {
+        throw new Error('Invalid date format. Use YYYY-MM-DD format');
+      }
+
+      if (fromDateObj > toDateObj) {
+        throw new Error('From date must be before or equal to to date');
+      }
+
+      return {
+        subquery: `
+          SELECT 
+            ${measure === 'Players' ? 'pgs.player_id' : 'tgs.team_id'} as entity_id,
+            ${measure === 'Players' ? 'pgs.game_id' : 'tgs.game_id'} as game_id
+          FROM ${measure === 'Players' ? 'player_game_stats pgs' : 'team_game_stats tgs'}
+          JOIN games g ON ${measure === 'Players' ? 'pgs' : 'tgs'}.game_id = g.id
+          WHERE g.game_type = 'regular'
+            AND g.game_date >= '${fromDate}'
+            AND g.game_date <= '${toDate}'
+        `,
+        description: `${fromDate} to ${toDate}`
+      };
+
     default:
       throw new Error(`Unknown organizer type: ${type}`);
   }
@@ -155,7 +197,7 @@ const validateOrganizer = (organizer) => {
     return errors;
   }
 
-  const validTypes = ['all_games', 'last_games', 'game_range', 'home_away'];
+  const validTypes = ['all_games', 'last_games', 'game_range', 'home_away', 'last_period', 'date_range'];
   if (!validTypes.includes(organizer.type)) {
     errors.push(`Invalid organizer type. Must be one of: ${validTypes.join(', ')}`);
     return errors;
@@ -195,6 +237,50 @@ const validateOrganizer = (organizer) => {
         errors.push('Home/Away organizer requires gameType to be either "home" or "away"');
       }
       break;
+
+    case 'last_period':
+      if (!organizer.period || !['days', 'weeks', 'months'].includes(organizer.period)) {
+        errors.push('Last period organizer requires period to be "days", "weeks", or "months"');
+      }
+      if (!organizer.value || typeof organizer.value !== 'number' || organizer.value <= 0) {
+        errors.push('Last period organizer requires a positive number value');
+      }
+      // Add reasonable limits
+      if (organizer.period === 'days' && organizer.value > 365) {
+        errors.push('Last days cannot exceed 365');
+      }
+      if (organizer.period === 'weeks' && organizer.value > 52) {
+        errors.push('Last weeks cannot exceed 52');
+      }
+      if (organizer.period === 'months' && organizer.value > 12) {
+        errors.push('Last months cannot exceed 12');
+      }
+      break;
+
+    case 'date_range':
+      if (!organizer.fromDate) {
+        errors.push('Date range organizer requires fromDate');
+      }
+      if (!organizer.toDate) {
+        errors.push('Date range organizer requires toDate');
+      }
+      
+      if (organizer.fromDate && organizer.toDate) {
+        const fromDate = new Date(organizer.fromDate);
+        const toDate = new Date(organizer.toDate);
+        
+        if (isNaN(fromDate.getTime())) {
+          errors.push('Invalid fromDate format. Use YYYY-MM-DD');
+        }
+        if (isNaN(toDate.getTime())) {
+          errors.push('Invalid toDate format. Use YYYY-MM-DD');
+        }
+        
+        if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime()) && fromDate > toDate) {
+          errors.push('From date must be before or equal to to date');
+        }
+      }
+      break;
   }
 
   return errors;
@@ -210,13 +296,22 @@ const getOrganizerDescription = (organizer) => {
       return 'All Games';
     
     case 'last_games':
-      return `Last ${organizer.value} Games`;
+      return `Last ${organizer.value} Games (Season Position)`;
     
     case 'game_range':
       return `Games ${organizer.from} to ${organizer.to}`;
     
     case 'home_away':
       return `${organizer.gameType.charAt(0).toUpperCase() + organizer.gameType.slice(1)} Games`;
+
+    case 'last_period':
+      const periodLabel = organizer.value === 1 
+        ? organizer.period.slice(0, -1) // Remove 's' for singular
+        : organizer.period;
+      return `Last ${organizer.value} ${periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)}`;
+
+    case 'date_range':
+      return `${organizer.fromDate} to ${organizer.toDate}`;
     
     default:
       return 'Unknown Organizer';
