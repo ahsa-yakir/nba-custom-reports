@@ -77,7 +77,7 @@ const getOrganizerTypes = async (req, res) => {
       {
         type: 'last_games',
         name: 'Last X Games',
-        description: 'Calculate averages for the last X games played by each player/team',
+        description: 'Calculate averages for the last X games of the season (based on season position, not individual player games)',
         parameters: [
           {
             name: 'value',
@@ -85,9 +85,10 @@ const getOrganizerTypes = async (req, res) => {
             required: true,
             min: 1,
             max: 82,
-            description: 'Number of recent games to include'
+            description: 'Number of recent games to include (season position based)'
           }
-        ]
+        ],
+        note: 'Fixed: Now uses season position instead of individual player games'
       },
       {
         type: 'game_range',
@@ -126,13 +127,71 @@ const getOrganizerTypes = async (req, res) => {
           }
         ],
         stackable: true
+      },
+      {
+        type: 'last_period',
+        name: 'Last X Time Period',
+        description: 'Calculate averages for games within the last X days, weeks, or months from the latest game date',
+        parameters: [
+          {
+            name: 'period',
+            type: 'select',
+            required: true,
+            options: ['days', 'weeks', 'months'],
+            description: 'Time period type'
+          },
+          {
+            name: 'value',
+            type: 'number',
+            required: true,
+            min: 1,
+            description: 'Number of time periods to include'
+          }
+        ],
+        limits: {
+          days: { max: 365, description: 'Maximum 365 days' },
+          weeks: { max: 52, description: 'Maximum 52 weeks' },
+          months: { max: 12, description: 'Maximum 12 months' }
+        },
+        isNew: true
+      },
+      {
+        type: 'date_range',
+        name: 'Date Range',
+        description: 'Calculate averages for games within a specific date range',
+        parameters: [
+          {
+            name: 'fromDate',
+            type: 'date',
+            required: true,
+            format: 'YYYY-MM-DD',
+            description: 'Start date'
+          },
+          {
+            name: 'toDate',
+            type: 'date',
+            required: true,
+            format: 'YYYY-MM-DD',
+            description: 'End date'
+          }
+        ],
+        validation: {
+          fromDate: 'Must be in YYYY-MM-DD format',
+          toDate: 'Must be in YYYY-MM-DD format and after fromDate'
+        },
+        isNew: true
       }
     ];
 
     res.json({
       success: true,
       organizerTypes,
-      message: 'Available organizer types for filtering game scope'
+      message: 'Available organizer types for filtering game scope',
+      changes: {
+        'last_games': 'Fixed to use season position instead of individual player games',
+        'last_period': 'New organizer for time-based filtering',
+        'date_range': 'New organizer for specific date ranges'
+      }
     });
 
   } catch (error) {
