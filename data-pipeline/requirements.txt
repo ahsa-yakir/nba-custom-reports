@@ -1,0 +1,11 @@
+# NBA API and data processing
+nba-api==1.2.1
+psycopg2-binary==2.9.7
+requests==2.31.0
+
+# Data handling
+pandas==2.0.3
+numpy==1.24.3
+
+# Logging and utilities
+python-dateutil==2.8.2

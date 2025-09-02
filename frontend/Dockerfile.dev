@@ -1,0 +1,19 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+RUN npm install
+
+# Copy configuration files
+COPY postcss.config.js ./
+COPY tailwind.config.js ./
+
+# Copy source
+COPY . .
+
+EXPOSE 3000
+
+# Start development server
+CMD ["npm", "start"]

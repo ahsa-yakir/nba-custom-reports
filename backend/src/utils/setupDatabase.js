@@ -590,6 +590,8 @@ const setupDatabase = async (force = false) => {
     await runMigration('002_create_indexes.sql');
     await runMigration('003_create_career_stats_tables.sql');
     await runMigration('004_create_auth_tables.sql');
+    await runMigration('005_add_organizer_column.sql');
+    await runMigration('006_update_organizer_validation.sql');
     
     // Comprehensive verification
     console.log('🔍 Running comprehensive verification...');
