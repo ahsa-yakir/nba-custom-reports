@@ -4,6 +4,7 @@ NBA Data Pipeline - Main Orchestrator (Enhanced with Career Stats)
 Coordinates team initialization, player initialization, data extraction, and career stats
 """
 
+import os
 import sys
 from datetime import date, datetime
 import logging
@@ -208,13 +209,12 @@ class NBADataPipeline:
             raise
 
 def get_db_config() -> Dict[str, str]:
-    """Get database configuration"""
     return {
-        'host': 'localhost',
-        'database': 'nba_analytics',
-        'user': 'nba_user',
-        'password': 'your_password',
-        'port': 5432
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'database': os.getenv('DB_NAME', 'nba_analytics'),
+        'user': os.getenv('DB_USER', 'postgres'),
+        'password': os.getenv('DB_PASSWORD', 'postgres'),
+        'port': int(os.getenv('DB_PORT', 5432))
     }
 
 def parse_date(date_str: str) -> date:
