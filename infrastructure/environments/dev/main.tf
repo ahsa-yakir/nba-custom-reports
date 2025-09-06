@@ -130,3 +130,19 @@ resource "aws_security_group" "rds" {
     create_before_destroy = true
   }
 }
+
+module "rds" {
+  source = "../../modules/rds"
+
+  project_name          = var.project_name
+  environment          = var.environment
+  private_subnet_ids   = module.vpc.private_subnet_ids
+  db_security_group_id = aws_security_group.rds.id
+  db_password          = var.db_password
+}
+
+module "ecr" {
+  source = "../../modules/ecr"
+
+  project_name = var.project_name
+}
