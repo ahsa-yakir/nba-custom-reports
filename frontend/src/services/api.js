@@ -1,19 +1,42 @@
 // API service for communicating with NBA Analytics backend
 import axios from 'axios';
 
-// Create axios instance with base configuration
+// Function to get the API URL from multiple sources
+const getApiUrl = () => {
+  // 1. Check if runtime config is available (for containerized environments)
+  if (window.runtimeConfig && window.runtimeConfig.API_URL) {
+    return window.runtimeConfig.API_URL;
+  }
+  
+  // 2. Check build-time environment variable
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // 3. For development/localhost, try to detect if we're in a container
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:3001';
+  }
+  
+  // 4. For production, use relative URL to the same domain (ALB will route /api/* to backend)
+  return '';  // This makes requests relative to current domain
+};
+
+// Create axios instance with dynamic base configuration
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001',
   timeout: 30000, // 30 second timeout
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor for logging
+// Dynamically set baseURL before each request
 api.interceptors.request.use(
   (config) => {
-    console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.url}`);
+    const baseURL = getApiUrl();
+    config.baseURL = baseURL;
+    
+    console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${baseURL}${config.url}`);
     return config;
   },
   (error) => {
@@ -101,12 +124,14 @@ export const apiService = {
       return {
         status: 'connected',
         health,
-        database: dbTest
+        database: dbTest,
+        apiUrl: getApiUrl()
       };
     } catch (error) {
       return {
         status: 'failed',
-        error: error.message
+        error: error.message,
+        apiUrl: getApiUrl()
       };
     }
   }

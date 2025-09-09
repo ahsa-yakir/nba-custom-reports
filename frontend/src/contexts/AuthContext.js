@@ -1,10 +1,29 @@
 /**
  * Authentication Context for NBA Analytics
- * Provides global auth state management
+ * Provides global auth state management with dynamic API URL resolution
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001/api';
+// Function to get the API URL from multiple sources (same as api.js)
+const getApiUrl = () => {
+  // 1. Check if runtime config is available (for containerized environments)
+  if (window.runtimeConfig && window.runtimeConfig.API_URL) {
+    return window.runtimeConfig.API_URL;
+  }
+  
+  // 2. Check build-time environment variable
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // 3. For development/localhost, try to detect if we're in a container
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:3001';
+  }
+  
+  // 4. For production, use relative URL to the same domain (ALB will route /api/* to backend)
+  return '';  // This makes requests relative to current domain
+};
 
 const AuthContext = createContext();
 
@@ -75,7 +94,8 @@ class SimpleAuthService {
   }
 
   async apiRequest(endpoint, options = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const baseUrl = getApiUrl();
+    const url = `${baseUrl}${endpoint}`;
     
     const defaultOptions = {
       method: 'GET',
@@ -115,7 +135,8 @@ class SimpleAuthService {
 
   async login(credentials) {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const baseUrl = getApiUrl();
+      const response = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -146,7 +167,8 @@ class SimpleAuthService {
 
   async register(userData) {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      const baseUrl = getApiUrl();
+      const response = await fetch(`${baseUrl}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -178,7 +200,8 @@ class SimpleAuthService {
   async logout() {
     try {
       if (this.refreshToken) {
-        await fetch(`${API_BASE_URL}/auth/logout`, {
+        const baseUrl = getApiUrl();
+        await fetch(`${baseUrl}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

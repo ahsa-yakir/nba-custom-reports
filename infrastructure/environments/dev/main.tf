@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.1"
+    }
   }
   
   backend "s3" {
@@ -30,12 +34,32 @@ provider "aws" {
   }
 }
 
+# Data source for current AWS account
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 module "vpc" {
   source = "../../modules/vpc"
 
   project_name = var.project_name
   environment  = var.environment
   vpc_cidr     = var.vpc_cidr
+}
+
+module "ecr" {
+  source = "../../modules/ecr"
+
+  project_name = var.project_name
+}
+
+module "rds" {
+  source = "../../modules/rds"
+
+  project_name          = var.project_name
+  environment          = var.environment
+  private_subnet_ids   = module.vpc.private_subnet_ids
+  db_security_group_id = aws_security_group.rds.id
+  db_password          = var.db_password
 }
 
 # Security Groups
@@ -87,6 +111,15 @@ resource "aws_security_group" "ecs" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  # Allow ECS containers to communicate with each other
+  ingress {
+    description = "Inter-container communication"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -131,18 +164,45 @@ resource "aws_security_group" "rds" {
   }
 }
 
-module "rds" {
-  source = "../../modules/rds"
+module "alb" {
+  source = "../../modules/alb"
 
-  project_name          = var.project_name
-  environment          = var.environment
-  private_subnet_ids   = module.vpc.private_subnet_ids
-  db_security_group_id = aws_security_group.rds.id
-  db_password          = var.db_password
+  project_name           = var.project_name
+  environment           = var.environment
+  vpc_id                = module.vpc.vpc_id
+  public_subnet_ids     = module.vpc.public_subnet_ids
+  alb_security_group_id = aws_security_group.alb.id
 }
 
-module "ecr" {
-  source = "../../modules/ecr"
+module "secrets" {
+  source = "../../modules/secrets"
 
   project_name = var.project_name
+  environment  = var.environment
+  db_username  = "postgres"
+  db_password  = var.db_password
+  db_endpoint  = split(":", module.rds.db_instance_endpoint)[0]
+  db_port      = 5432
+  db_name      = "nba_analytics"
+  frontend_url = module.alb.alb_url
+}
+
+module "ecs" {
+  source = "../../modules/ecs"
+
+  project_name                = var.project_name
+  environment                = var.environment
+  aws_region                 = var.aws_region
+  private_subnet_ids         = module.vpc.private_subnet_ids
+  ecs_security_group_id      = aws_security_group.ecs.id
+  frontend_repository_url    = module.ecr.frontend_repository_url
+  backend_repository_url     = module.ecr.backend_repository_url
+  etl_repository_url         = module.ecr.etl_repository_url
+  frontend_target_group_arn  = module.alb.frontend_target_group_arn
+  backend_target_group_arn   = module.alb.backend_target_group_arn
+  ecs_task_execution_role_arn = module.secrets.ecs_task_execution_role_arn
+  ecs_task_role_arn          = module.secrets.ecs_task_role_arn
+  db_credentials_secret_arn  = module.secrets.db_credentials_secret_arn
+  app_secrets_secret_arn     = module.secrets.app_secrets_secret_arn
+  frontend_url              = module.alb.alb_url
 }

@@ -10,8 +10,13 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD || 'password',
   port: process.env.DB_PORT || 5432,
   
+  // SSL configuration for AWS RDS
+  ssl: process.env.NODE_ENV === 'production' || process.env.DB_HOST?.includes('amazonaws.com') 
+    ? { rejectUnauthorized: false } 
+    : false,
+  
   // Connection pool settings
-  max: 20, // Maximum number of connections
+  max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });
