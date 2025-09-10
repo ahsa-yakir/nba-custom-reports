@@ -1,10 +1,29 @@
 /**
  * Authentication Context for NBA Analytics
- * Provides global auth state management
+ * Provides global auth state management with dynamic API URL resolution
  */
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001/api';
+// Function to get the API URL from multiple sources (same as other API services)
+const getApiUrl = () => {
+  // 1. Check if runtime config is available (for containerized environments)
+  if (window.runtimeConfig && window.runtimeConfig.API_URL) {
+    return window.runtimeConfig.API_URL;
+  }
+  
+  // 2. Check build-time environment variable
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // 3. For development/localhost, try to detect if we're in a container
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:3001';
+  }
+  
+  // 4. For production, use relative URL to the same domain (ALB will route /api/* to backend)
+  return '';  // This makes requests relative to current domain
+};
 
 const AuthContext = createContext();
 
@@ -16,7 +35,7 @@ export const useAuth = () => {
   return context;
 };
 
-// Simple auth service for now - we'll expand this later
+// Enhanced auth service with dynamic URL resolution
 class SimpleAuthService {
   constructor() {
     this.token = null;
@@ -25,6 +44,13 @@ class SimpleAuthService {
     
     // Load from localStorage on init
     this.loadFromStorage();
+  }
+
+  // Get the current API base URL
+  getApiBaseUrl() {
+    const baseUrl = getApiUrl();
+    console.log(`🔗 Auth API Base URL: ${baseUrl || 'relative'}/api`);
+    return baseUrl ? `${baseUrl}/api` : '/api';
   }
 
   loadFromStorage() {
@@ -75,7 +101,10 @@ class SimpleAuthService {
   }
 
   async apiRequest(endpoint, options = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const baseUrl = this.getApiBaseUrl();
+    const url = `${baseUrl}${endpoint}`;
+    
+    console.log(`🔄 Auth API Request: ${options.method || 'GET'} ${url}`);
     
     const defaultOptions = {
       method: 'GET',
@@ -103,19 +132,81 @@ class SimpleAuthService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error(`❌ Auth API Error: ${response.status} ${url}`, errorData);
+        
+        // Handle token expiration
+        if (response.status === 401 && errorData.expired && this.refreshToken) {
+          console.log('🔄 Token expired, attempting refresh...');
+          const refreshResult = await this.refreshAccessToken();
+          if (refreshResult.success) {
+            // Retry the original request with new token
+            finalOptions.headers.Authorization = `Bearer ${this.token}`;
+            const retryResponse = await fetch(url, finalOptions);
+            if (retryResponse.ok) {
+              return await retryResponse.json();
+            }
+          }
+        }
+        
         throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      return await response.json();
+      const responseData = await response.json();
+      console.log(`✅ Auth API Success: ${response.status} ${url}`);
+      return responseData;
     } catch (error) {
-      console.error(`API request failed for ${endpoint}:`, error);
+      console.error(`❌ Auth API request failed for ${endpoint}:`, error);
       throw error;
+    }
+  }
+
+  async refreshAccessToken() {
+    if (!this.refreshToken) {
+      console.warn('No refresh token available');
+      return { success: false };
+    }
+
+    try {
+      const baseUrl = this.getApiBaseUrl();
+      const response = await fetch(`${baseUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken: this.refreshToken }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Token refresh failed:', data);
+        this.clearStorage();
+        return { success: false };
+      }
+
+      if (data.success && data.tokens) {
+        this.token = data.tokens.accessToken;
+        localStorage.setItem('nba_access_token', this.token);
+        console.log('✅ Token refreshed successfully');
+        return { success: true };
+      }
+
+      return { success: false };
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      this.clearStorage();
+      return { success: false };
     }
   }
 
   async login(credentials) {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const baseUrl = this.getApiBaseUrl();
+      const url = `${baseUrl}/auth/login`;
+      
+      console.log(`🔑 Login attempt: ${url}`);
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,6 +217,7 @@ class SimpleAuthService {
       const data = await response.json();
 
       if (!response.ok) {
+        console.error('❌ Login failed:', response.status, data);
         throw new Error(data.message || 'Login failed');
       }
 
@@ -135,6 +227,7 @@ class SimpleAuthService {
           data.tokens.refreshToken,
           data.user
         );
+        console.log('✅ Login successful:', data.user.username);
       }
 
       return data;
@@ -146,7 +239,12 @@ class SimpleAuthService {
 
   async register(userData) {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      const baseUrl = this.getApiBaseUrl();
+      const url = `${baseUrl}/auth/register`;
+      
+      console.log(`📝 Registration attempt: ${url}`);
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -157,6 +255,7 @@ class SimpleAuthService {
       const data = await response.json();
 
       if (!response.ok) {
+        console.error('❌ Registration failed:', response.status, data);
         throw new Error(data.message || 'Registration failed');
       }
 
@@ -166,6 +265,7 @@ class SimpleAuthService {
           data.tokens.refreshToken,
           data.user
         );
+        console.log('✅ Registration successful:', data.user.username);
       }
 
       return data;
@@ -178,7 +278,8 @@ class SimpleAuthService {
   async logout() {
     try {
       if (this.refreshToken) {
-        await fetch(`${API_BASE_URL}/auth/logout`, {
+        const baseUrl = this.getApiBaseUrl();
+        await fetch(`${baseUrl}/auth/logout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -186,11 +287,13 @@ class SimpleAuthService {
           },
           body: JSON.stringify({ refreshToken: this.refreshToken }),
         });
+        console.log('✅ Logout API call completed');
       }
     } catch (error) {
       console.warn('Logout API call failed:', error);
     } finally {
       this.clearStorage();
+      console.log('🧹 Auth storage cleared');
     }
   }
 
@@ -221,13 +324,30 @@ export const AuthProvider = ({ children }) => {
       try {
         setLoading(true);
         
+        console.log('🔄 Initializing auth...');
+        
         // Check if user is already authenticated
         if (authService.isAuthenticated()) {
           const currentUser = authService.getCurrentUser();
           setUser(currentUser);
+          console.log('✅ User authenticated from storage:', currentUser.username);
           
-          // TODO: Verify token is still valid by fetching fresh profile
-          // For now, we'll trust the stored data
+          // Verify token is still valid by fetching fresh profile
+          try {
+            const profileResponse = await authService.apiRequest('/auth/profile');
+            if (profileResponse.success) {
+              // Update user data if profile fetch was successful
+              setUser(profileResponse.user);
+              authService.saveToStorage(null, null, profileResponse.user);
+              console.log('✅ Profile verified and updated');
+            }
+          } catch (error) {
+            console.warn('Profile verification failed, clearing auth:', error);
+            authService.clearStorage();
+            setUser(null);
+          }
+        } else {
+          console.log('ℹ️ No authenticated user found');
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -235,6 +355,7 @@ export const AuthProvider = ({ children }) => {
       } finally {
         setLoading(false);
         setInitialized(true);
+        console.log('✅ Auth initialization complete');
       }
     };
 
@@ -322,6 +443,7 @@ export const AuthProvider = ({ children }) => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Initializing NBA Analytics...</p>
+          <p className="text-xs text-gray-400 mt-2">API: {getApiUrl() || 'relative'}</p>
         </div>
       </div>
     );
