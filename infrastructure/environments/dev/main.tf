@@ -1,3 +1,5 @@
+# infrastructure/environments/dev/main.tf
+
 terraform {
   required_version = ">= 1.0"
   
@@ -9,6 +11,10 @@ terraform {
     random = {
       source  = "hashicorp/random"
       version = "~> 3.1"
+    }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.0"
     }
   }
   
@@ -205,4 +211,20 @@ module "ecs" {
   db_credentials_secret_arn  = module.secrets.db_credentials_secret_arn
   app_secrets_secret_arn     = module.secrets.app_secrets_secret_arn
   frontend_url              = module.alb.alb_url
+}
+
+# Bastion Host Module (deploy when needed for data loading)
+module "bastion" {
+  source = "../../modules/bastion"
+  
+  # Only create bastion when explicitly enabled
+  count = var.enable_bastion ? 1 : 0
+
+  project_name          = var.project_name
+  environment          = var.environment
+  vpc_id               = module.vpc.vpc_id
+  public_subnet_id     = module.vpc.public_subnet_ids[0]
+  rds_security_group_id = aws_security_group.rds.id
+  rds_endpoint         = split(":", module.rds.db_instance_endpoint)[0]
+  ssh_public_key       = var.ssh_public_key
 }
