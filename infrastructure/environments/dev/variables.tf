@@ -1,3 +1,5 @@
+# infrastructure/environments/dev/variables.tf
+
 variable "aws_region" {
   description = "AWS region"
   type        = string
@@ -26,4 +28,16 @@ variable "db_password" {
   description = "Database password"
   type        = string
   sensitive   = true
+}
+
+variable "enable_bastion" {
+  description = "Enable bastion host for database access"
+  type        = bool
+  default     = false
+}
+
+variable "ssh_public_key" {
+  description = "SSH public key for bastion host access (only needed when enable_bastion=true)"
+  type        = string
+  default     = ""
 }

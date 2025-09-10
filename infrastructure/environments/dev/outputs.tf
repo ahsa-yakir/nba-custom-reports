@@ -1,3 +1,5 @@
+# infrastructure/environments/dev/outputs.tf
+
 output "vpc_id" {
   description = "ID of the VPC"
   value       = module.vpc.vpc_id
@@ -80,5 +82,23 @@ output "etl_task_definition_arn" {
 output "database_endpoint" {
   description = "RDS database endpoint"
   value       = module.rds.db_instance_endpoint
+  sensitive   = true
+}
+
+# Bastion Host Information (only when enabled)
+output "bastion_public_ip" {
+  description = "Public IP address of the bastion host"
+  value       = var.enable_bastion ? module.bastion[0].bastion_public_ip : null
+}
+
+output "bastion_ssh_command" {
+  description = "SSH command to create tunnel to RDS"
+  value       = var.enable_bastion ? module.bastion[0].ssh_command : null
+  sensitive   = true
+}
+
+output "bastion_connection_instructions" {
+  description = "Instructions for connecting to RDS through bastion"
+  value       = var.enable_bastion ? module.bastion[0].connection_instructions : "Bastion host not enabled. Set enable_bastion=true to deploy."
   sensitive   = true
 }
