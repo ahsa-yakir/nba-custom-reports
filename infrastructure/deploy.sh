@@ -94,10 +94,8 @@ get_terraform_outputs() {
     ALB_URL=$(tofu output -raw application_url 2>/dev/null || { print_error "Failed to get ALB URL from Terraform output"; exit 1; })
     FRONTEND_REPO=$(tofu output -raw frontend_repository_url 2>/dev/null || { print_error "Failed to get frontend repository URL"; exit 1; })
     BACKEND_REPO=$(tofu output -raw backend_repository_url 2>/dev/null || { print_error "Failed to get backend repository URL"; exit 1; })
-    ETL_REPO=$(tofu output -raw etl_repository_url 2>/dev/null || { print_error "Failed to get ETL repository URL"; exit 1; })
     CLUSTER_NAME=$(tofu output -raw ecs_cluster_name 2>/dev/null || { print_error "Failed to get ECS cluster name"; exit 1; })
     DB_SETUP_TASK_ARN=$(tofu output -raw db_setup_task_definition_arn 2>/dev/null || { print_error "Failed to get DB setup task ARN"; exit 1; })
-    ETL_TASK_ARN=$(tofu output -raw etl_task_definition_arn 2>/dev/null || { print_error "Failed to get ETL task ARN"; exit 1; })
     PRIVATE_SUBNETS=$(tofu output -json private_subnet_ids 2>/dev/null | jq -r '.[]' | tr '\n' ',' | sed 's/,$//' || { print_error "Failed to get private subnets"; exit 1; })
     ECS_SG=$(tofu output -raw ecs_security_group_id 2>/dev/null || { print_error "Failed to get ECS security group"; exit 1; })
     
@@ -157,21 +155,6 @@ build_and_push_containers() {
         exit 1
     }
     
-    # Build and push ETL
-    print_status "Building ETL container..."
-    cd "$PROJECT_ROOT/data-pipeline"
-    docker build --platform linux/amd64 -t nba-analytics/etl:latest . || {
-        print_error "Failed to build ETL container"
-        exit 1
-    }
-    
-    print_status "Pushing ETL container..."
-    docker tag nba-analytics/etl:latest "$ETL_REPO:latest"
-    docker push "$ETL_REPO:latest" || {
-        print_error "Failed to push ETL container"
-        exit 1
-    }
-    
     cd "$SCRIPT_DIR"
     print_success "All containers built and pushed successfully"
 }
@@ -197,62 +180,6 @@ run_database_setup() {
     print_warning "Note: This is fire-and-forget. Check ECS console for task status."
 }
 
-# Function to run ETL setup
-run_etl_setup() {
-    print_status "Running ETL setup (teams and players initialization)..."
-    
-    TASK_ARN=$(aws ecs run-task \
-        --cluster "$CLUSTER_NAME" \
-        --task-definition "$ETL_TASK_ARN" \
-        --launch-type FARGATE \
-        --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNETS],securityGroups=[$ECS_SG],assignPublicIp=DISABLED}" \
-        --overrides '{"containerOverrides":[{"name":"etl","command":["python","nba_pipeline.py","setup"]}]}' \
-        --region "$AWS_REGION" \
-        --query 'tasks[0].taskArn' \
-        --output text) || {
-        print_error "Failed to start ETL setup task"
-        exit 1
-    }
-    
-    print_success "ETL setup task started: $TASK_ARN"
-    print_warning "Note: This is fire-and-forget. Check ECS console for task status."
-}
-
-# Function to run ETL command
-run_etl_command() {
-    local etl_args=("$@")
-    
-    if [ ${#etl_args[@]} -eq 0 ]; then
-        print_error "No ETL command provided"
-        return 1
-    fi
-    
-    print_status "Running ETL command: python nba_pipeline.py ${etl_args[*]}"
-    
-    # Convert array to JSON format for ECS overrides
-    local cmd_json="[\"python\",\"nba_pipeline.py\""
-    for arg in "${etl_args[@]}"; do
-        cmd_json="$cmd_json,\"$arg\""
-    done
-    cmd_json="$cmd_json]"
-    
-    TASK_ARN=$(aws ecs run-task \
-        --cluster "$CLUSTER_NAME" \
-        --task-definition "$ETL_TASK_ARN" \
-        --launch-type FARGATE \
-        --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNETS],securityGroups=[$ECS_SG],assignPublicIp=DISABLED}" \
-        --overrides "{\"containerOverrides\":[{\"name\":\"etl\",\"command\":$cmd_json}]}" \
-        --region "$AWS_REGION" \
-        --query 'tasks[0].taskArn' \
-        --output text) || {
-        print_error "Failed to start ETL task"
-        exit 1
-    }
-    
-    print_success "ETL task started: $TASK_ARN"
-    print_warning "Note: This is fire-and-forget. Check ECS console for task status."
-}
-
 # Function to show usage
 show_usage() {
     cat << EOF
@@ -265,45 +192,10 @@ Commands:
   deploy                 - Build containers, push to ECR, setup database, and initialize data
   build                  - Build and push containers only
   db-setup              - Run database setup only
-  etl-setup             - Run ETL setup (teams and players) only
-  etl [ETL_COMMAND]     - Run specific ETL command
-
-ETL Commands (use with 'etl' command):
-  Database Commands:
-    clear                                   # Clear all data from database
-    setup                                   # Initialize both teams and players (clears existing data)
-  
-  Setup Commands:
-    setup-teams                             # Initialize NBA teams only (clears all data first)
-    setup-players                           # Initialize active players only
-  
-  Load Commands (Traditional + Advanced Stats):
-    load YYYY-MM-DD                         # Load all stats for specific date
-    load YYYY-MM-DD to YYYY-MM-DD           # Load all stats for date range
-  
-  Load Commands (Traditional Stats Only):
-    load-basic YYYY-MM-DD                   # Load traditional stats only
-    load-basic YYYY-MM-DD to YYYY-MM-DD     # Load traditional stats only
-  
-  Load Commands (Advanced Stats Only):
-    load-advanced YYYY-MM-DD                # Load advanced stats only
-    load-advanced YYYY-MM-DD to YYYY-MM-DD  # Load advanced stats only
-  
-  Career Statistics Commands:
-    load-career-all                         # Load career stats for all players
-    load-career-all --max-players 50        # Load career stats for first 50 players
-    load-career-active                      # Load career stats for active players only
-    load-career-player PLAYER_ID           # Load career stats for specific player
-    load-career-players PLAYER_ID1,PLAYER_ID2  # Load career stats for multiple players
 
 Examples:
   $0 deploy                               # Full deployment
   $0 build                                # Build and push containers only
-  $0 etl setup                           # Initialize teams and players
-  $0 etl load 2025-01-19                 # Load stats for one day
-  $0 etl load 2025-01-15 to 2025-01-22  # Load stats for date range
-  $0 etl load-career-active              # Load career stats for active players
-  $0 etl load-career-player 2544         # Load career stats for LeBron James
 
 Prerequisites:
   - AWS CLI configured with valid credentials
@@ -331,7 +223,6 @@ main() {
             get_terraform_outputs
             build_and_push_containers
             run_database_setup
-            run_etl_setup
             print_success "Full deployment completed!"
             print_status "Your application should be available at: $ALB_URL"
             ;;
@@ -348,24 +239,6 @@ main() {
             check_prerequisites
             get_terraform_outputs
             run_database_setup
-            ;;
-        "etl-setup")
-            check_prerequisites
-            get_terraform_outputs
-            run_etl_setup
-            ;;
-        "etl")
-            if [ $# -eq 0 ]; then
-                print_error "ETL command requires arguments"
-                show_usage
-                exit 1
-            fi
-            check_prerequisites
-            get_terraform_outputs
-            run_etl_command "$@"
-            ;;
-        "-h"|"--help"|"help")
-            show_usage
             ;;
         *)
             print_error "Unknown command: $command"

@@ -25,19 +25,6 @@ resource "aws_ecr_repository" "backend" {
   }
 }
 
-resource "aws_ecr_repository" "etl" {
-  name                 = "${var.project_name}/etl"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name = "${var.project_name}-etl-ecr"
-  }
-}
-
 # Lifecycle Policies
 resource "aws_ecr_lifecycle_policy" "frontend" {
   repository = aws_ecr_repository.frontend.name
@@ -74,28 +61,6 @@ resource "aws_ecr_lifecycle_policy" "backend" {
           tagPrefixList = ["v"]
           countType     = "imageCountMoreThan"
           countNumber   = 10
-        }
-        action = {
-          type = "expire"
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_ecr_lifecycle_policy" "etl" {
-  repository = aws_ecr_repository.etl.name
-
-  policy = jsonencode({
-    rules = [
-      {
-        rulePriority = 1
-        description  = "Keep last 5 images"
-        selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["v"]
-          countType     = "imageCountMoreThan"
-          countNumber   = 5
         }
         action = {
           type = "expire"

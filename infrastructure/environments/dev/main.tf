@@ -203,7 +203,6 @@ module "ecs" {
   ecs_security_group_id      = aws_security_group.ecs.id
   frontend_repository_url    = module.ecr.frontend_repository_url
   backend_repository_url     = module.ecr.backend_repository_url
-  etl_repository_url         = module.ecr.etl_repository_url
   frontend_target_group_arn  = module.alb.frontend_target_group_arn
   backend_target_group_arn   = module.alb.backend_target_group_arn
   ecs_task_execution_role_arn = module.secrets.ecs_task_execution_role_arn

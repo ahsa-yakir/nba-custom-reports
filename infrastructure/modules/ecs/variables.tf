@@ -33,11 +33,6 @@ variable "backend_repository_url" {
   type        = string
 }
 
-variable "etl_repository_url" {
-  description = "ECR repository URL for ETL"
-  type        = string
-}
-
 variable "frontend_target_group_arn" {
   description = "ARN of the frontend target group"
   type        = string
