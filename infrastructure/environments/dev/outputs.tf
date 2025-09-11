@@ -57,11 +57,6 @@ output "backend_repository_url" {
   value       = module.ecr.backend_repository_url
 }
 
-output "etl_repository_url" {
-  description = "ETL ECR repository URL"
-  value       = module.ecr.etl_repository_url
-}
-
 # ECS Information
 output "ecs_cluster_name" {
   description = "Name of the ECS cluster"
@@ -71,11 +66,6 @@ output "ecs_cluster_name" {
 output "db_setup_task_definition_arn" {
   description = "ARN of the database setup task definition (uses backend container)"
   value       = module.ecs.db_setup_task_definition_arn
-}
-
-output "etl_task_definition_arn" {
-  description = "ARN of the ETL task definition for manual runs"
-  value       = module.ecs.etl_task_definition_arn
 }
 
 # Database Information
