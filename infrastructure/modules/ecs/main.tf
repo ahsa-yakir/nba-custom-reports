@@ -31,15 +31,6 @@ resource "aws_cloudwatch_log_group" "backend" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "etl" {
-  name              = "/ecs/${var.project_name}-${var.environment}-etl"
-  retention_in_days = 7
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-etl-logs"
-  }
-}
-
 # Frontend Task Definition
 resource "aws_ecs_task_definition" "frontend" {
   family                   = "${var.project_name}-${var.environment}-frontend"
@@ -235,69 +226,6 @@ resource "aws_ecs_task_definition" "db_setup" {
 
   tags = {
     Name = "${var.project_name}-${var.environment}-db-setup-task"
-  }
-}
-
-# ETL Task Definition (for data loading only)
-resource "aws_ecs_task_definition" "etl" {
-  family                   = "${var.project_name}-${var.environment}-etl"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = 1024
-  memory                   = 2048
-  execution_role_arn       = var.ecs_task_execution_role_arn
-  task_role_arn           = var.ecs_task_role_arn
-
-  container_definitions = jsonencode([
-    {
-      name  = "etl"
-      image = "${var.etl_repository_url}:latest"
-      
-      environment = [
-        {
-          name  = "NODE_ENV"
-          value = var.environment
-        }
-      ]
-
-      secrets = [
-        {
-          name      = "DB_HOST"
-          valueFrom = "${var.db_credentials_secret_arn}:host::"
-        },
-        {
-          name      = "DB_PORT"
-          valueFrom = "${var.db_credentials_secret_arn}:port::"
-        },
-        {
-          name      = "DB_NAME"
-          valueFrom = "${var.db_credentials_secret_arn}:database::"
-        },
-        {
-          name      = "DB_USER"
-          valueFrom = "${var.db_credentials_secret_arn}:username::"
-        },
-        {
-          name      = "DB_PASSWORD"
-          valueFrom = "${var.db_credentials_secret_arn}:password::"
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.etl.name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "ecs"
-        }
-      }
-
-      essential = true
-    }
-  ])
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-etl-task"
   }
 }
 

@@ -22,8 +22,3 @@ output "db_setup_task_definition_arn" {
   description = "ARN of the database setup task definition"
   value       = aws_ecs_task_definition.db_setup.arn
 }
-
-output "etl_task_definition_arn" {
-  description = "ARN of the ETL task definition"
-  value       = aws_ecs_task_definition.etl.arn
-}
