@@ -136,7 +136,7 @@ const OrganizerSection = ({
       case 'all_games':
         return 'All Games';
       case 'last_games':
-        return `Last ${organizer.value || 0} Games (Season Position)`;
+        return `Last ${organizer.value || 0} games player has played`;
       case 'game_range':
         return `Games ${organizer.from || 0} to ${organizer.to || 0}`;
       case 'home_away':
@@ -181,9 +181,6 @@ const OrganizerSection = ({
               {errors.value && (
                 <p className="text-red-500 text-xs mt-1">{errors.value}</p>
               )}
-              <p className="text-xs text-gray-500 mt-1">
-                <span className="font-medium">FIXED:</span> Now shows the last X games of the season (same period for all players)
-              </p>
             </div>
           </div>
         );

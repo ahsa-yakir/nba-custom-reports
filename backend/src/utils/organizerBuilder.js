@@ -23,42 +23,34 @@ const buildOrganizerSubquery = (organizer, measure) => {
 
   switch (type) {
     case 'last_games':
-      // FIXED: Season-position based instead of player-specific
+      // FIXED: Per-player/team last games instead of season position
       if (!value || value <= 0) {
         throw new Error('Last games organizer requires a positive value');
       }
 
       return {
         subquery: `
-          WITH season_position AS (
-            SELECT MAX(GREATEST(
-              COALESCE(home_team_game_number, 0),
-              COALESCE(away_team_game_number, 0)
-            )) as current_game
-            FROM games 
-            WHERE game_type = 'regular'
+          WITH ranked_games AS (
+            SELECT 
+              ${measure === 'Players' ? 'pgs.player_id' : 'tgs.team_id'} as entity_id,
+              ${measure === 'Players' ? 'pgs.game_id' : 'tgs.game_id'} as game_id,
+              ROW_NUMBER() OVER (
+                PARTITION BY ${measure === 'Players' ? 'pgs.player_id' : 'tgs.team_id'}
+                ORDER BY g.game_date DESC
+              ) as game_rank
+            FROM ${measure === 'Players' ? 'player_game_stats pgs' : 'team_game_stats tgs'}
+            JOIN games g ON ${measure === 'Players' ? 'pgs' : 'tgs'}.game_id = g.id
+            WHERE g.game_type = 'regular'
           )
-          SELECT 
-            ${measure === 'Players' ? 'pgs.player_id' : 'tgs.team_id'} as entity_id,
-            ${measure === 'Players' ? 'pgs.game_id' : 'tgs.game_id'} as game_id
-          FROM ${measure === 'Players' ? 'player_game_stats pgs' : 'team_game_stats tgs'}
-          JOIN games g ON ${measure === 'Players' ? 'pgs' : 'tgs'}.game_id = g.id
-          CROSS JOIN season_position sp
-          WHERE g.game_type = 'regular'
-            AND (
-              (${measure === 'Players' ? 'pgs.team_id = g.home_team_id' : 'tgs.team_id = g.home_team_id'} 
-               AND g.home_team_game_number > (sp.current_game - ${value})
-               AND g.home_team_game_number <= sp.current_game)
-              OR
-              (${measure === 'Players' ? 'pgs.team_id = g.away_team_id' : 'tgs.team_id = g.away_team_id'}
-               AND g.away_team_game_number > (sp.current_game - ${value})
-               AND g.away_team_game_number <= sp.current_game)
-            )
+          SELECT entity_id, game_id
+          FROM ranked_games 
+          WHERE game_rank <= ${value}
         `,
-        description: `Last ${value} Games (Season Position)`
+        description: `Last ${value} Games (Per ${measure.slice(0, -1)})`
       };
 
     case 'game_range':
+      // Keep this as-is since it's based on season position which makes sense for ranges
       if (!from || !to || from <= 0 || to <= 0 || from > to) {
         throw new Error('Game range organizer requires valid from and to values (from <= to)');
       }
@@ -104,7 +96,7 @@ const buildOrganizerSubquery = (organizer, measure) => {
       };
 
     case 'last_period':
-      // NEW: Last X days/weeks/months from latest game date
+      // Keep time-based organizers as-is since they don't rely on game counters
       if (!period || !['days', 'weeks', 'months'].includes(period) || !value || value <= 0) {
         throw new Error('Last period organizer requires valid period (days/weeks/months) and positive value');
       }
@@ -148,7 +140,7 @@ const buildOrganizerSubquery = (organizer, measure) => {
       };
 
     case 'date_range':
-      // NEW: Specific date range
+      // Keep date-based organizers as-is
       if (!fromDate || !toDate) {
         throw new Error('Date range organizer requires both fromDate and toDate');
       }
@@ -296,7 +288,7 @@ const getOrganizerDescription = (organizer) => {
       return 'All Games';
     
     case 'last_games':
-      return `Last ${organizer.value} Games (Season Position)`;
+      return `Last ${organizer.value} Games (Per Player/Team)`; // Updated description
     
     case 'game_range':
       return `Games ${organizer.from} to ${organizer.to}`;
