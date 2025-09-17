@@ -5,6 +5,16 @@ node_modules/
 .vscode/
 .idea/
 
+# Test coverage and reports
+coverage/
+*.lcov
+.nyc_output/
+test-results/
+junit.xml
+
+# Jest cache
+.jest/
+
 # Python
 __pycache__/
 *.py[cod]
