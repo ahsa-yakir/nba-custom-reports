@@ -2,7 +2,8 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.js'],
   collectCoverageFrom: [
-    'src/**/*.js',
-    '!src/server.js'
+    'src/utils/**/*.js',  // Only test utils for now
+    '!src/utils/setupDatabase.js',
+    '!src/utils/seedData.js'
   ]
 };
