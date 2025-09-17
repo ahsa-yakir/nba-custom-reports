@@ -1,20 +1,13 @@
 name: NBA Analytics Backend Tests
 
 on:
-  # Trigger on pull requests to main
+  # Trigger on pull requests to main (runs BEFORE merge)
   pull_request:
     branches: [ main ]
     paths:
       - 'backend/**'
       - '.github/workflows/**'
   
-  # Trigger on pushes to main (after merge)
-  push:
-    branches: [ main ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/**'
-
   # Allow manual trigger
   workflow_dispatch:
 
@@ -135,42 +128,14 @@ jobs:
         # Extract coverage percentage - looking for "All files | 62.18 |" pattern
         COVERAGE=$(grep -E "All files.*\|.*[0-9]+\.[0-9]+.*\|" coverage_output.txt | awk -F'|' '{print $2}' | tr -d ' ' | head -1)
         
-        # Fallback method 1 - look for percentage pattern in All files line
-        if [[ -z "$COVERAGE" || "$COVERAGE" == "" ]]; then
-          COVERAGE=$(grep "All files" coverage_output.txt | grep -oE "[0-9]+\.[0-9]+" | head -1)
-        fi
-        
-        # Fallback method 2 - different parsing approach
-        if [[ -z "$COVERAGE" || "$COVERAGE" == "" ]]; then
-          COVERAGE=$(awk '/All files/ {print $3}' coverage_output.txt | head -1)
-        fi
-        
-        # Fallback method 3 - capture any decimal number after "All files"
-        if [[ -z "$COVERAGE" || "$COVERAGE" == "" ]]; then
-          COVERAGE=$(grep "All files" coverage_output.txt | sed 's/.*All files[^0-9]*\([0-9]\+\.[0-9]\+\).*/\1/' | head -1)
-        fi
-        
         echo "Extracted coverage: '$COVERAGE'"
         echo "Current coverage: ${COVERAGE}%"
         echo "Minimum required: ${MIN_COVERAGE}%"
         
         # Validate that we got a number
         if [[ ! "$COVERAGE" =~ ^[0-9]+\.?[0-9]*$ ]]; then
-          echo "⚠️ Could not parse coverage percentage from output."
-          echo "Expected format: 'All files | XX.XX |' but parsing failed"
-          echo "Checking if coverage output contains expected percentage..."
-          
-          # Try one more approach - look for any percentage >= 60 in the output
-          if grep -qE "(6[0-9]|7[0-9]|8[0-9]|9[0-9])\.[0-9]+" coverage_output.txt; then
-            echo "✅ Found coverage >= 60% in output, allowing merge"
-            exit 0
-          elif grep -qE "[0-9]+\.[0-9]+" coverage_output.txt; then
-            echo "❌ Found coverage < 60% in output, blocking merge"
-            exit 1
-          else
-            echo "⚠️ No coverage percentage found, assuming tests passed and allowing merge"
-            exit 0
-          fi
+          echo "❌ Could not parse coverage percentage from output"
+          exit 1
         fi
         
         # Compare coverage using awk for decimal comparison
