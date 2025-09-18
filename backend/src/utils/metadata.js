@@ -633,22 +633,33 @@ const getSortColumnMapping = (measure, isAdvanced = false, isUnified = false) =>
 
 // Helper functions
 const isTraditionalColumn = (columnName) => {
+  if (!columnName) return false; // Handle null/undefined/empty string
+  
   const playerCol = PLAYER_COLUMNS[columnName];
   const teamCol = TEAM_COLUMNS[columnName];
   
   return (playerCol && ['traditional', 'identity'].includes(playerCol.category)) ||
-         (teamCol && ['traditional', 'identity'].includes(teamCol.category));
+         (teamCol && ['traditional', 'identity'].includes(teamCol.category)) ||
+         false; // Explicit false return
 };
 
 const isAdvancedColumn = (columnName) => {
+  if (!columnName) return false; // Handle null/undefined/empty string
+  
   const playerCol = PLAYER_COLUMNS[columnName];
   const teamCol = TEAM_COLUMNS[columnName];
   
   return (playerCol && playerCol.category === 'advanced') ||
-         (teamCol && teamCol.category === 'advanced');
+         (teamCol && teamCol.category === 'advanced') ||
+         false; // Explicit false return
 };
 
 const getColumnsByCategory = (measure, categories) => {
+  // Validate inputs
+  if (!measure || !['Players', 'Teams'].includes(measure) || !Array.isArray(categories)) {
+    return []; // Return empty array for invalid inputs
+  }
+  
   const columns = measure === 'Players' ? PLAYER_COLUMNS : TEAM_COLUMNS;
   const result = [];
   
