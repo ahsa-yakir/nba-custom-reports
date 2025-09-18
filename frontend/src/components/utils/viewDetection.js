@@ -100,14 +100,15 @@ export const getViewOptions = (apiResponse, filters) => {
   return options;
 };
 
-export const shouldAutoSwitchView = (currentView, recommendedView, filters) => {
-  // Don't auto-switch if user has manually selected a view
-  if (currentView && currentView !== 'traditional') {
+export const shouldAutoSwitchView = (lastViewType, recommendedView, filters) => {
+  // Don't auto-switch if user has manually selected any view
+  if (lastViewType) {
     return false;
   }
 
   const filterAnalysis = analyzeFilterTypes(filters);
   
+  // Only auto-switch on initial load when no view has been selected
   // Auto-switch to custom for mixed filters
   if (filterAnalysis.isMixed && recommendedView === 'custom') {
     return true;

@@ -141,11 +141,18 @@ const CustomReportsBuilder = () => {
         reportState.filters
       );
       
-      if (shouldSwitch && reportState.viewType !== detectedViewType) {
+      // Only auto-switch if:
+      // 1. We should switch according to the logic
+      // 2. The current view is different from detected
+      // 3. The user hasn't manually selected a view recently (check if lastViewType is null or matches current)
+      const isManualSelection = reportState.lastViewType && reportState.lastViewType === reportState.viewType;
+      
+      if (shouldSwitch && reportState.viewType !== detectedViewType && !isManualSelection) {
         setUiState(prev => ({ ...prev, isAutoSwitching: true }));
         setReportState(prev => ({ 
           ...prev, 
-          viewType: detectedViewType
+          viewType: detectedViewType,
+          lastViewType: detectedViewType // Mark this as an auto-switch
         }));
         
         setTimeout(() => {
@@ -153,7 +160,7 @@ const CustomReportsBuilder = () => {
         }, 2000);
       }
     }
-  }, [reportState.filters, reportState.viewType, detectedViewType, reportState.lastViewType, dataCache.apiResponse]);
+  }, [reportState.filters, detectedViewType, dataCache.apiResponse]); // Removed reportState.lastViewType and reportState.viewType from dependencies
 
   // Initialize connection and teams
   useEffect(() => {
@@ -722,7 +729,7 @@ const CustomReportsBuilder = () => {
     setReportState(prev => ({ 
       ...prev, 
       viewType: newViewType,
-      lastViewType: newViewType
+      lastViewType: newViewType // This marks it as a manual selection
     }));
   };
 
