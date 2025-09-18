@@ -9,10 +9,10 @@ import ConnectionStatus from './components/ConnectionStatus';
 import ErrorDisplay from './components/ErrorDisplay';
 import MeasureSection from './components/MeasureSection';
 import FilterSection from './components/FilterSection';
-import OrganizerSection from './components/OrganizerSection';
 import GenerateReportButton from './components/GenerateReportButton';
 import RequirementsWarning from './components/RequirementsWarning';
 import ReportResults from './components/ReportResults';
+import OrganizerSection from './components/OrganizerSection';
 
 const CustomReportsBuilder = () => {
   const { dashboardId } = useParams(); // Get dashboard ID from URL if present
