@@ -1,3 +1,4 @@
+// Modal for displaying a player's full career statistics
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, User, Trophy, Calendar, TrendingUp, Loader2, AlertCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -18,6 +19,7 @@ const PlayerCareerModal = ({ isOpen, onClose, playerId, playerName }) => {
     three_p_pct: false,
     ft_pct: false
   });
+  const [headshotError, setHeadshotError] = useState(false);
 
   const fetchCareerData = useCallback(async () => {
     console.log('Starting API call for player:', playerId);
@@ -40,6 +42,7 @@ const PlayerCareerModal = ({ isOpen, onClose, playerId, playerName }) => {
     console.log('useEffect triggered:', { isOpen, playerId });
     if (isOpen && playerId) {
       console.log('Conditions met, calling fetchCareerData');
+      setHeadshotError(false);
       fetchCareerData();
     }
   }, [isOpen, playerId, fetchCareerData]);
@@ -188,8 +191,17 @@ const PlayerCareerModal = ({ isOpen, onClose, playerId, playerName }) => {
               {/* Player Info Section */}
               <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6">
                 <div className="flex items-center space-x-6">
-                  <div className="w-20 h-20 bg-gray-300 rounded-full flex items-center justify-center">
-                    <User className="w-10 h-10 text-gray-500" />
+                  <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 flex items-center justify-center border border-gray-300">
+                    {!headshotError ? (
+                      <img
+                        src={`https://cdn.nba.com/headshots/nba/latest/260x190/${playerId}.png`}
+                        alt={careerData.player.name}
+                        className="w-full h-full object-cover object-top"
+                        onError={() => setHeadshotError(true)}
+                      />
+                    ) : (
+                      <User className="w-10 h-10 text-gray-500" />
+                    )}
                   </div>
                   <div className="flex-1">
                     <h3 className="text-2xl font-bold text-gray-800">{careerData.player.name}</h3>
